@@ -1,0 +1,30 @@
+src/
+├── config/
+│   ├── config.js
+│   ├── connect.js
+│   └── setup.js
+├── controllers/
+│   ├── auth/
+│   │   └── auth.js
+│   ├── order/
+│   │   └── order.js
+│   ├── product/
+│   │   ├── category.js
+│   │   └── product.js
+│   └── tracking/
+│       └── user.js
+├── middleware/
+│   └── auth.js
+├── models/
+│   ├── branch.js
+│   ├── category.js
+│   ├── counter.js
+│   ├── index.js
+│   ├── order.js
+│   ├── products.js
+│   └── user.js
+└── routes/
+    ├── auth.js    
+    ├── index.js    
+    ├── order.js    
+    └── product.js 

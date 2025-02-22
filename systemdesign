@@ -1,0 +1,40 @@
+Customer App Backend Store Owner App Delivery App
+| | | |
+|--- Create Order -->| | |
+| |--- WS: newOrder ---->| |
+| |<-- Order Created ----| |
+| | |--- Accept Order ---->|
+| |<--- Order Accepted --|--- WS: orderAccepted -|
+| | |--- Mark Packaged --->|
+| |--- WS: orderReady ------------------------->|
+| |<------------------ Assign Delivery ---------|
+
++-----------------------+
+| Customer |
+| (Places Order) |
++----------+------------+
+|
+v
++-----------------------+
+| Backend API | (Fastify + MongoDB)
+| Handles Orders, Users |
++-----------------------+
+|
+v
++-----------------------+
+| Branch |
+| Accepts, Prepares, |
+| Assigns to Delivery |
++-----------------------+
+|
+v
++-----------------------+
+| Delivery Partner |
+| Picks & Delivers |
++-----------------------+
+|
+v
++-----------------------+
+| Notification |
+| (Socket.IO + Events) |
++-----------------------+
