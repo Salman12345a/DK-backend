@@ -1,6 +1,7 @@
 import Order from "../../models/order.js";
 import Branch from "../../models/branch.js";
 import { Customer, DeliveryPartner } from "../../models/user.js";
+import Product from "../../models/products.js";
 
 const defaultLocation = {
   latitude: 0,
@@ -8,50 +9,250 @@ const defaultLocation = {
   address: "No address available",
 };
 
+const validateModifications = (originalItems, modifiedItems) => {
+  const itemMap = new Map(originalItems.map((o) => [o.item._id.toString(), o]));
+  const changes = [];
+  const updatedItems = [];
+  let newTotal = 0;
+
+  for (const modItem of modifiedItems) {
+    const origItem = itemMap.get(modItem.item.toString());
+    if (!origItem) {
+      return { valid: false, message: "Cannot add new items" };
+    }
+    if (modItem.count > origItem.count) {
+      return {
+        valid: false,
+        message: `Cannot increase quantity for ${origItem.item.name}`,
+      };
+    }
+    if (modItem.count === 0) {
+      changes.push(`Removed ${origItem.item.name} (${origItem.count}x)`);
+    } else if (modItem.count < origItem.count) {
+      changes.push(
+        `Reduced ${origItem.item.name} from ${origItem.count} to ${modItem.count}`
+      );
+      updatedItems.push({
+        item: origItem.item._id,
+        count: modItem.count,
+        price: origItem.price,
+      });
+      newTotal += origItem.price * modItem.count;
+    } else {
+      updatedItems.push({
+        item: origItem.item._id,
+        count: modItem.count,
+        price: origItem.price,
+      });
+      newTotal += origItem.price * modItem.count;
+    }
+    itemMap.delete(modItem.item.toString());
+  }
+
+  itemMap.forEach((origItem) => {
+    changes.push(`Removed ${origItem.item.name} (${origItem.count}x)`);
+  });
+
+  return {
+    valid: true,
+    updatedItems,
+    newTotal,
+    changes,
+    message: changes.join(", ") || "No changes made",
+  };
+};
+
+export const modifyOrder = async (req, reply) => {
+  try {
+    const { orderId } = req.params;
+    const { modifiedItems } = req.body;
+    const branchId = req.user.userId;
+
+    if (!modifiedItems || !Array.isArray(modifiedItems)) {
+      return reply.code(400).send({
+        status: "ERROR",
+        message: "Invalid modification data",
+        code: "INVALID_MODIFICATION_DATA",
+      });
+    }
+
+    const order = await Order.findOne({
+      _id: orderId,
+      branch: branchId,
+      status: "accepted",
+    }).populate("items.item", "name price");
+
+    if (!order) {
+      return reply.code(404).send({
+        status: "ERROR",
+        message: "Order not found or not modifiable",
+        code: "ORDER_NOT_MODIFIABLE",
+      });
+    }
+
+    const validation = validateModifications(order.items, modifiedItems);
+    if (!validation.valid) {
+      return reply.code(400).send({
+        status: "ERROR",
+        message: validation.message,
+        code: "MODIFICATION_VALIDATION_FAILED",
+      });
+    }
+
+    order.items = validation.updatedItems;
+    order.totalPrice = validation.newTotal;
+    order.modifiedAt = new Date();
+    order.modificationHistory.push({
+      modifiedBy: branchId,
+      changes: validation.changes,
+      timestamp: new Date(),
+    });
+
+    await order.save();
+
+    // Emit to Socket.IO in app.js
+    req.server.io.emit("orderModified", {
+      branchId,
+      orderId: order._id,
+      changes: validation.changes,
+      newTotal: order.totalPrice,
+      modifiedAt: order.modifiedAt,
+    });
+
+    return reply.send({
+      status: "SUCCESS",
+      data: order.toObject(),
+    });
+  } catch (error) {
+    console.error("[ModifyOrder] Error:", error);
+    return reply.code(500).send({
+      status: "ERROR",
+      message: "Order modification failed",
+      code: "MODIFICATION_FAILED",
+      systemError: error.message,
+    });
+  }
+};
+
+export const markOrderAsPacked = async (req, reply) => {
+  try {
+    const { orderId } = req.params;
+
+    if (req.user.role !== "Branch") {
+      return reply
+        .status(403)
+        .send({ message: "Unauthorized: Branch access required" });
+    }
+    if (
+      req.user.userId !==
+      (await Order.findById(orderId).select("branch")).branch.toString()
+    ) {
+      return reply
+        .status(403)
+        .send({ message: "Unauthorized: Branch does not own this order" });
+    }
+
+    const order = await Order.findById(orderId).populate(
+      "items.item",
+      "name price"
+    );
+    if (!order) return reply.status(404).send({ message: "Order not found" });
+    if (order.status !== "accepted") {
+      return reply
+        .status(400)
+        .send({ message: "Order must be accepted first" });
+    }
+
+    order.status = "packed";
+    order.statusHistory.push({ status: "packed" });
+    await order.save();
+
+    // Emit to Socket.IO in app.js
+    const lastModification =
+      order.modificationHistory.length > 0
+        ? order.modificationHistory.slice(-1)[0].changes
+        : [];
+    req.server.io.emit("orderPackedWithUpdates", {
+      customerId: order.customer.toString(),
+      orderId: order._id,
+      items: order.items.map((item) => ({
+        item: item.item._id,
+        name: item.item.name,
+        count: item.count,
+        price: item.price,
+      })),
+      totalPrice: order.totalPrice,
+      changes: lastModification,
+      message:
+        "Your order is packed! Here are the updated details based on availability.",
+    });
+
+    if (order.deliveryServiceAvailable) {
+      const branch = await Branch.findById(order.branch).populate(
+        "deliveryPartners",
+        "_id"
+      );
+      branch.deliveryPartners.forEach((partner) => {
+        req.server.io.emit("orderReadyForAssignment", {
+          partnerId: partner._id.toString(),
+          order: order.toObject(),
+        });
+      });
+    } else {
+      req.server.io.emit("orderPackedForPickup", {
+        customerId: order.customer.toString(),
+        message: "Order is packed! Come and collect the order",
+        order: order.toObject(),
+      });
+    }
+
+    return reply.send(order);
+  } catch (err) {
+    console.error("Pack Order Error:", err);
+    return reply
+      .status(500)
+      .send({ message: "Order packing failed", error: err.message });
+  }
+};
+
 export const createOrder = async (req, reply) => {
   try {
-    const { userId } = req.user; // From JWT token
-    const { items, branch, totalPrice } = req.body;
+    const { userId } = req.user;
+    const { items, branch } = req.body;
 
-    // Validate input
-    if (!items?.length || !branch || !totalPrice) {
+    if (!items?.length || !branch) {
       return reply.status(400).send({ message: "Missing required fields" });
     }
 
-    // Get customer and branch
     const [customer, branchData] = await Promise.all([
       Customer.findById(userId),
       Branch.findById(branch),
     ]);
 
-    // Add debug logs
-    console.log("Customer Lookup:", customer ? "Found" : "Missing");
-    console.log("Branch Lookup:", branchData ? "Found" : "Missing");
-
-    console.log("Received Branch ID:", branch);
-    console.log("Branch Data:", branchData);
-
-    if (!customer) {
+    if (!customer)
       return reply.status(404).send({ message: "Customer not found" });
-    }
-    if (!branchData) {
+    if (!branchData)
       return reply.status(404).send({ message: "Branch not found" });
-    }
 
-    // Check delivery service availability (example logic)
-    const deliveryServiceAvailable = branchData.deliveryPartners?.length > 0;
+    const productIds = items.map((i) => i.id);
+    const products = await Product.find({ _id: { $in: productIds } });
+    const itemsWithPrices = items.map((item) => {
+      const product = products.find((p) => p._id.toString() === item.id);
+      if (!product) throw new Error(`Product ${item.id} not found`);
+      return { item: item.id, count: Number(item.count), price: product.price };
+    });
+    const totalPrice = itemsWithPrices.reduce(
+      (sum, item) => sum + item.price * item.count,
+      0
+    );
 
     const newOrder = new Order({
       customer: userId,
-      items: items.map((item) => ({
-        id: item.id,
-        item: item.id,
-        count: Number(item.count),
-      })),
+      items: itemsWithPrices,
       branch,
       totalPrice,
       status: "placed",
-      deliveryServiceAvailable,
+      deliveryServiceAvailable: branchData.deliveryPartners?.length > 0,
       statusHistory: [{ status: "placed" }],
       deliveryLocation: {
         latitude: customer.liveLocation?.latitude || defaultLocation.latitude,
@@ -66,16 +267,16 @@ export const createOrder = async (req, reply) => {
       },
     });
 
-    // Auto-accept if delivery available
     if (newOrder.deliveryServiceAvailable) {
       newOrder.status = "accepted";
       newOrder.statusHistory.push({ status: "accepted" });
     }
 
     const savedOrder = await newOrder.save();
-
-    // Notify branch
-    req.server.io.to(`branch_${branch}`).emit("newOrder", savedOrder);
+    req.server.io.emit("newOrder", {
+      branchId: branch,
+      ...savedOrder.toObject(),
+    });
 
     return reply.status(201).send(savedOrder);
   } catch (err) {
@@ -86,6 +287,7 @@ export const createOrder = async (req, reply) => {
   }
 };
 
+// Other functions modified similarly (removing req.server.io.to, adding req.server.io.emit)
 export const acceptOrder = async (req, reply) => {
   try {
     const { orderId } = req.params;
@@ -100,7 +302,10 @@ export const acceptOrder = async (req, reply) => {
     order.statusHistory.push({ status: "accepted" });
     await order.save();
 
-    req.server.io.to(`branch_${order.branch}`).emit("orderAccepted", order);
+    req.server.io.emit("orderAccepted", {
+      branchId: order.branch.toString(),
+      ...order.toObject(),
+    });
     return reply.send(order);
   } catch (err) {
     console.error("Accept Order Error:", err);
@@ -110,44 +315,16 @@ export const acceptOrder = async (req, reply) => {
   }
 };
 
-export const markOrderAsPacked = async (req, reply) => {
-  try {
-    const { orderId } = req.params;
-    const order = await Order.findById(orderId);
-
-    if (!order) return reply.status(404).send({ message: "Order not found" });
-    if (order.status !== "accepted") {
-      return reply
-        .status(400)
-        .send({ message: "Order must be accepted first" });
-    }
-
-    order.status = "packed";
-    order.statusHistory.push({ status: "packed" });
-    await order.save();
-
-    // Notify available delivery partners
-    const branch = await Branch.findById(order.branch).populate(
-      "deliveryPartners"
-    );
-    branch.deliveryPartners.forEach((partner) => {
-      req.server.io
-        .to(`partner_${partner._id}`)
-        .emit("orderReadyForAssignment", order);
-    });
-
-    return reply.send(order);
-  } catch (err) {
-    console.error("Pack Order Error:", err);
-    return reply
-      .status(500)
-      .send({ message: "Order packing failed", error: err.message });
-  }
-};
-
 export const assignDeliveryPartner = async (req, reply) => {
   try {
     const { orderId, partnerId } = req.params;
+
+    if (req.user.role !== "Branch") {
+      return reply
+        .status(403)
+        .send({ message: "Unauthorized: Branch access required" });
+    }
+
     const [order, partner] = await Promise.all([
       Order.findById(orderId),
       DeliveryPartner.findById(partnerId),
@@ -156,8 +333,18 @@ export const assignDeliveryPartner = async (req, reply) => {
     if (!order || !partner) {
       return reply.status(404).send({ message: "Order/Partner not found" });
     }
+    if (order.branch.toString() !== req.user.userId) {
+      return reply
+        .status(403)
+        .send({ message: "Unauthorized: Branch does not own this order" });
+    }
     if (order.status !== "packed") {
       return reply.status(400).send({ message: "Order must be packed first" });
+    }
+    if (!order.deliveryServiceAvailable) {
+      return reply
+        .status(400)
+        .send({ message: "Delivery service not available" });
     }
     if (!partner.availability) {
       return reply.status(400).send({ message: "Partner unavailable" });
@@ -166,16 +353,16 @@ export const assignDeliveryPartner = async (req, reply) => {
     order.status = "assigned";
     order.deliveryPartner = partnerId;
     order.statusHistory.push({ status: "assigned" });
-
     partner.availability = false;
     partner.currentOrder = orderId;
 
     await Promise.all([order.save(), partner.save()]);
-
-    // Notify all parties
-    req.server.io.to(`branch_${order.branch}`).emit("orderAssigned", order);
-    req.server.io.to(`partner_${partnerId}`).emit("newAssignment", order);
-    req.server.io.to(`customer_${order.customer}`).emit("orderAssigned", order);
+    req.server.io.emit("orderAssigned", {
+      branchId: order.branch.toString(),
+      partnerId,
+      customerId: order.customer.toString(),
+      ...order.toObject(),
+    });
 
     return reply.send(order);
   } catch (err) {
@@ -183,6 +370,50 @@ export const assignDeliveryPartner = async (req, reply) => {
     return reply
       .status(500)
       .send({ message: "Partner assignment failed", error: err.message });
+  }
+};
+
+export const orderCancel = async (req, reply) => {
+  try {
+    const { orderId } = req.params;
+    const { userId, role } = req.user;
+
+    if (role !== "Branch") {
+      return reply
+        .status(403)
+        .send({ message: "Unauthorized: Branch access required" });
+    }
+
+    const order = await Order.findById(orderId);
+    if (!order) return reply.status(404).send({ message: "Order not found" });
+    if (!["placed", "accepted", "packed"].includes(order.status)) {
+      return reply
+        .status(400)
+        .send({ message: "Order cannot be cancelled at this stage" });
+    }
+    if (order.branch.toString() !== userId) {
+      return reply
+        .status(403)
+        .send({ message: "Unauthorized: Branch does not own this order" });
+    }
+
+    order.status = "cancelled";
+    order.statusHistory.push({ status: "cancelled" });
+    await order.save();
+
+    req.server.io.emit("orderCancelled", {
+      branchId: order.branch.toString(),
+      customerId: order.customer.toString(),
+      message: "Your order has been cancelled",
+      order: order.toObject(),
+    });
+
+    return reply.send(order);
+  } catch (err) {
+    console.error("Cancel Order Error:", err);
+    return reply
+      .status(500)
+      .send({ message: "Order cancellation failed", error: err.message });
   }
 };
 
@@ -194,22 +425,14 @@ export const updateOrderStatus = async (req, reply) => {
 
     const order = await Order.findById(orderId);
     if (!order) return reply.status(404).send({ message: "Order not found" });
-
-    // In updateOrderStatus controller
-    console.log("User ID:", userId);
-    console.log("Order's Delivery Partner:", order.deliveryPartner?.toString());
-
-    // Authorization check
     if (order.deliveryPartner?.toString() !== userId) {
       return reply.status(403).send({ message: "Unauthorized action" });
     }
 
-    // Validate status transitions
     const validTransitions = {
       assigned: ["arriving", "delivered", "cancelled"],
       arriving: ["delivered"],
     };
-
     if (!validTransitions[order.status]?.includes(status)) {
       return reply.status(400).send({ message: "Invalid status transition" });
     }
@@ -218,10 +441,11 @@ export const updateOrderStatus = async (req, reply) => {
     order.statusHistory.push({ status });
     await order.save();
 
-    // Real-time updates
-    req.server.io.to(orderId).emit("statusUpdate", order);
+    req.server.io.emit("statusUpdate", {
+      orderId,
+      ...order.toObject(),
+    });
 
-    // Release partner if order completed
     if (["delivered", "cancelled"].includes(status)) {
       await DeliveryPartner.findByIdAndUpdate(userId, {
         availability: true,
@@ -238,6 +462,7 @@ export const updateOrderStatus = async (req, reply) => {
   }
 };
 
+// getOrders and getOrderById remain unchanged (no Socket.IO usage)
 export const getOrders = async (req, reply) => {
   try {
     const { status, branchId, customerId, partnerId } = req.query;

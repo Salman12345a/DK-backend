@@ -8,62 +8,135 @@ import fastifySocketIO from "fastify-socket.io";
 
 const start = async () => {
   try {
-    // Connect to MongoDB
     await connectDB(process.env.MONGO_URI);
+    const app = Fastify({
+      logger: true,
+      ignoreTrailingSlash: true,
+    });
 
-    // Initialize Fastify app
-    const app = Fastify();
+    // Enhanced error handling
+    app.setErrorHandler((error, request, reply) => {
+      app.log.error(error);
+      reply.status(500).send({
+        error: error.name,
+        message: error.message,
+      });
+    });
 
-    // Register Socket.IO with Fastify
+    // Socket.IO setup
     app.register(fastifySocketIO, {
       cors: {
-        origin: "*", // Allow all origins
+        origin:
+          process.env.NODE_ENV === "development"
+            ? "*"
+            : [process.env.FRONTEND_URL],
+        methods: ["GET", "POST"],
       },
       pingInterval: 10000,
       pingTimeout: 5000,
-      transports: ["websocket"], // Use WebSocket transport
+      transports: ["websocket", "polling"],
     });
 
-    // Add custom reply decorator
     app.decorateReply("redirectFixed", function (url, code = 302) {
       return this.redirect(url, code);
     });
 
-    // Register routes and admin router
     await registerRoutes(app);
     await buildAdminRouter(app);
 
-    // Start the server
-    app.listen({ port: PORT }, (err, addr) => {
-      if (err) {
-        console.error("Server error:", err);
-        process.exit(1);
-      } else {
-        console.log(`Server is running at http://localhost:${PORT}/admin`);
-      }
+    // Initialize Socket.IO before listening
+    await app.ready();
+
+    // Start server with proper host configuration
+    await app.listen({
+      port: PORT,
+      host: process.env.NODE_ENV === "production" ? "0.0.0.0" : "127.0.0.1",
+    });
+    console.log(`Server running at http://localhost:${PORT}/admin`);
+
+    // Socket.IO events
+    const io = app.io;
+    io.on("connection", (socket) => {
+      console.log("A User Connected");
+
+      socket.on("joinRoom", (orderId) => {
+        socket.join(orderId);
+        console.log(`User joined room ${orderId}`);
+      });
+
+      socket.on("discount", () => {
+        console.log("Discount event received");
+      });
+
+      socket.on("syncmart:status", (data) => {
+        io.emit("syncmart:status", data);
+      });
+
+      socket.on("syncmart:delivery-service-available", (data) => {
+        io.emit("syncmart:delivery-service-available", data);
+      });
+
+      // Order-specific event handlers (moved from order.js)
+      socket.on("orderPackedWithUpdates", (data) => {
+        console.log(
+          "Order Packed Notification:",
+          JSON.stringify(data, null, 2)
+        );
+        io.to(`customer_${data.customerId}`).emit(
+          "orderPackedWithUpdates",
+          data
+        );
+      });
+
+      socket.on("orderModified", (data) => {
+        io.to(`branch_${data.branchId}`).emit("orderModified", data);
+      });
+
+      socket.on("newOrder", (data) => {
+        io.to(`branch_${data.branchId}`).emit("newOrder", data);
+      });
+
+      socket.on("orderAccepted", (data) => {
+        io.to(`branch_${data.branchId}`).emit("orderAccepted", data);
+      });
+
+      socket.on("orderReadyForAssignment", (data) => {
+        io.to(`partner_${data.partnerId}`).emit(
+          "orderReadyForAssignment",
+          data
+        );
+      });
+
+      socket.on("orderPackedForPickup", (data) => {
+        io.to(`customer_${data.customerId}`).emit("orderPackedForPickup", data);
+      });
+
+      socket.on("orderAssigned", (data) => {
+        io.to(`branch_${data.branchId}`).emit("orderAssigned", data);
+        io.to(`partner_${data.partnerId}`).emit("newAssignment", data);
+        io.to(`customer_${data.customerId}`).emit("orderAssigned", data);
+      });
+
+      socket.on("orderCancelled", (data) => {
+        io.to(`branch_${data.branchId}`).emit("orderCancelled", data);
+        io.to(`customer_${data.customerId}`).emit("orderCancelled", data);
+      });
+
+      socket.on("statusUpdate", (data) => {
+        io.to(data.orderId).emit("statusUpdate", data);
+      });
+
+      socket.on("disconnect", () => {
+        console.log("User Disconnected");
+      });
     });
 
-    // Setup WebSocket events
-    app.ready().then(() => {
-      app.io.on("connection", (socket) => {
-        console.log("A User Connected");
-
-        // Join a specific room
-        socket.on("joinRoom", (orderId) => {
-          socket.join(orderId);
-          console.log(`User joined room ${orderId}`);
-        });
-
-        // Handle custom events
-        socket.on("discount", () => {
-          console.log("Discount event received");
-        });
-
-        // Handle disconnection
-        socket.on("disconnect", () => {
-          console.log("User Disconnected");
-        });
-      });
+    // Graceful shutdown
+    process.on("SIGINT", () => {
+      io.close();
+      app.close();
+      console.log("Server stopped");
+      process.exit(0);
     });
   } catch (error) {
     console.error("Startup error:", error);

@@ -1,33 +1,25 @@
-// models/branch.js
 import mongoose from "mongoose";
 
 const branchSchema = new mongoose.Schema({
-  name: {
-    type: String,
-    required: true,
-  },
+  email: { type: String, required: true, unique: true },
+  password: { type: String, required: true },
+  name: { type: String, required: true },
   location: {
     latitude: { type: Number, required: true },
     longitude: { type: Number, required: true },
   },
-  address: {
-    type: String,
-    required: true,
-  },
+  address: { type: String, required: true },
   deliveryPartners: [
-    {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "DeliveryPartner", // Reference to your DeliveryPartner model
-    },
+    { type: mongoose.Schema.Types.ObjectId, ref: "DeliveryPartner" },
   ],
-  operatingStatus: {
+  storeStatus: {
     type: String,
-    enum: ["open", "closed", "holiday"],
+    enum: ["open", "closed"],
     default: "open",
   },
   deliveryServiceAvailable: {
     type: Boolean,
-    default: false, // Branch controls whether delivery is available
+    default: false,
   },
   createdAt: {
     type: Date,

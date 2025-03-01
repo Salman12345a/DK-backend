@@ -1,4 +1,5 @@
 import { Customer, DeliveryPartner } from "../../models/user.js";
+import Branch from "../../models/branch.js";
 import jwt from "jsonwebtoken";
 import "dotenv/config";
 
@@ -99,6 +100,37 @@ export const loginDeliveryPartner = async (req, reply) => {
       message: "An error occurred",
       error: error.message || "Unknown error",
     });
+  }
+};
+
+export const loginBranch = async (req, reply) => {
+  try {
+    const { email, password } = req.body;
+    if (!email || !password)
+      return reply
+        .status(400)
+        .send({ message: "Email and password are required" });
+
+    const branch = await Branch.findOne({ email });
+    if (!branch) return reply.status(404).send({ message: "Branch not found" });
+    if (branch.password !== password)
+      return reply.status(400).send({ message: "Invalid credentials" });
+
+    const { accessToken, refreshToken } = generateTokens({
+      _id: branch._id,
+      role: "Branch",
+    });
+    return reply.send({
+      message: "Branch login successful",
+      accessToken,
+      refreshToken,
+      branch,
+    });
+  } catch (error) {
+    console.error("Error in loginBranch:", error);
+    return reply
+      .status(500)
+      .send({ message: "Branch login failed", error: error.message });
   }
 };
 

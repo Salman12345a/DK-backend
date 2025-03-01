@@ -9,30 +9,26 @@ const orderSchema = new mongoose.Schema(
     },
     customer: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "Customer", // Ensure you have a Customer model
+      ref: "Customer",
       required: true,
     },
     deliveryPartner: {
-      // MISSING FIELD - ADDED
       type: mongoose.Schema.Types.ObjectId,
-      ref: "DeliveryPartner", // Requires a DeliveryPartner model
+      ref: "DeliveryPartner",
       required: false,
     },
     items: [
       {
-        id: {
-          // Duplicate field - can be removed
-          type: mongoose.Schema.Types.ObjectId,
-          ref: "Product",
-          required: true,
-        },
         item: {
-          // Keep this one
           type: mongoose.Schema.Types.ObjectId,
           ref: "Product",
           required: true,
         },
         count: {
+          type: Number,
+          required: true,
+        },
+        price: {
           type: Number,
           required: true,
         },
@@ -50,6 +46,7 @@ const orderSchema = new mongoose.Schema(
         "accepted",
         "packed",
         "assigned",
+        "arriving",
         "delivered",
         "cancelled",
       ],
@@ -72,6 +69,20 @@ const orderSchema = new mongoose.Schema(
       type: Number,
       required: true,
     },
+    modifiedAt: Date,
+    modificationHistory: [
+      {
+        modifiedBy: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "Branch",
+        },
+        changes: [String],
+        timestamp: {
+          type: Date,
+          default: Date.now,
+        },
+      },
+    ],
     createdAt: {
       type: Date,
       default: Date.now,
@@ -82,23 +93,16 @@ const orderSchema = new mongoose.Schema(
     },
   },
   {
-    strictPopulate: false, // Add this to avoid StrictPopulateError
+    strictPopulate: false,
   }
 );
 
-// Middleware to check branch delivery availability before saving
 orderSchema.pre("validate", async function (next) {
   try {
     const branch = await mongoose.model("Branch").findById(this.branch);
-    if (!branch) {
-      return next(new Error("Branch not found"));
-    }
-
+    if (!branch) return next(new Error("Branch not found"));
     if (!branch.deliveryServiceAvailable) {
-      this.deliveryServiceAvailable = false; // If branch disables, force false
-    } else {
-      // If branch enables delivery, customer can choose true/false (no override)
-      this.deliveryServiceAvailable = this.deliveryServiceAvailable;
+      this.deliveryServiceAvailable = false;
     }
     next();
   } catch (error) {
@@ -106,7 +110,6 @@ orderSchema.pre("validate", async function (next) {
   }
 });
 
-// Generate sequential orderId
 async function getNextSequenceValue(sequenceName) {
   const sequenceDocument = await Counter.findOneAndUpdate(
     { name: sequenceName },

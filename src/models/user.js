@@ -1,6 +1,5 @@
 import mongoose from "mongoose";
 
-// Base user Schema
 const userSchema = new mongoose.Schema({
   name: { type: String },
   role: {
@@ -11,7 +10,6 @@ const userSchema = new mongoose.Schema({
   isActivated: { type: Boolean, default: false },
 });
 
-// Customer Schema
 const customerSchema = new mongoose.Schema({
   ...userSchema.obj,
   phone: { type: Number, required: true, unique: true },
@@ -23,11 +21,10 @@ const customerSchema = new mongoose.Schema({
   address: { type: String },
 });
 
-// Delivery partner Schema
 const deliveryPartnerSchema = new mongoose.Schema({
   ...userSchema.obj,
   email: { type: String, required: true, unique: true },
-  password: { type: String, required: true }, // Changed to String for password storage (better practice)
+  password: { type: String, required: true },
   phone: { type: Number, required: true },
   role: { type: String, enum: ["DeliveryPartner"], default: "DeliveryPartner" },
   liveLocation: {
@@ -35,14 +32,8 @@ const deliveryPartnerSchema = new mongoose.Schema({
     longitude: { type: Number },
   },
   address: { type: String },
-  branch: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "Branch",
-  },
-  availability: {
-    type: Boolean,
-    default: true, // Ensures new delivery partners are available by default
-  },
+  branch: { type: mongoose.Schema.Types.ObjectId, ref: "Branch" },
+  availability: { type: Boolean, default: true },
   currentOrder: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Order",
@@ -50,20 +41,15 @@ const deliveryPartnerSchema = new mongoose.Schema({
   },
 });
 
-// Admin Schema
 const adminSchema = new mongoose.Schema({
   ...userSchema.obj,
   email: { type: String, required: true, unique: true },
-  password: { type: String, required: true }, // Changed to String for password storage
+  password: { type: String, required: true },
   role: { type: String, enum: ["Admin"], default: "Admin" },
   address: { type: String },
-  branch: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "Branch",
-  },
+  branch: { type: mongoose.Schema.Types.ObjectId, ref: "Branch" },
 });
 
-// Models
 export const Customer = mongoose.model("Customer", customerSchema);
 export const DeliveryPartner = mongoose.model(
   "DeliveryPartner",
