@@ -41,20 +41,34 @@ const start = async () => {
       return this.redirect(url, code);
     });
 
-    await registerRoutes(app);
+    // Build AdminJS first to register multipart
+    console.log("Building AdminJS router (should register multipart)...");
     await buildAdminRouter(app);
+    console.log(
+      "Multipart available after AdminJS:",
+      app.hasPlugin("@fastify/multipart")
+    );
 
-    // Initialize Socket.IO before listening
+    // Register routes after AdminJS
+    console.log("Registering routes...");
+    await registerRoutes(app);
+
     await app.ready();
+    console.log(
+      "Server ready with plugins:",
+      Array.from(app.pluginNames || [])
+    );
+    console.log(
+      "Multipart available after ready:",
+      app.hasPlugin("@fastify/multipart")
+    );
 
-    // Start server with proper host configuration
     await app.listen({
       port: PORT,
       host: process.env.NODE_ENV === "production" ? "0.0.0.0" : "127.0.0.1",
     });
     console.log(`Server running at http://localhost:${PORT}/admin`);
 
-    // Socket.IO events
     const io = app.io;
     io.on("connection", (socket) => {
       console.log("A User Connected");
@@ -76,7 +90,6 @@ const start = async () => {
         io.emit("syncmart:delivery-service-available", data);
       });
 
-      // Order-specific event handlers (moved from order.js)
       socket.on("orderPackedWithUpdates", (data) => {
         console.log(
           "Order Packed Notification:",
@@ -131,7 +144,6 @@ const start = async () => {
       });
     });
 
-    // Graceful shutdown
     process.on("SIGINT", () => {
       io.close();
       app.close();

@@ -14,74 +14,48 @@ export const registerDeliveryPartner = async (request, reply) => {
       password,
       phone,
     } = request.body;
-    const { licenseImage, rcImage, pancard } = request.files || {};
-    const branchId = request.user.userId;
+    const files = request.files;
 
-    if (
-      !name ||
-      !age ||
-      !gender ||
-      !licenseNumber ||
-      !rcNumber ||
-      !email ||
-      !password ||
-      !phone ||
-      !licenseImage ||
-      !rcImage ||
-      !pancard
-    ) {
-      return reply
-        .code(400)
-        .send({ message: "All fields and documents are required" });
-    }
-
-    const licenseUrl = await uploadToS3(
-      licenseImage[0],
-      `delivery-partners/license-${licenseNumber}`
+    const licenseImageUrl = await uploadToS3(
+      files.licenseImage.buffer,
+      `delivery-partners/license-${licenseNumber}.${
+        files.licenseImage.mimetype.split("/")[1]
+      }`
     );
-    const rcUrl = await uploadToS3(
-      rcImage[0],
-      `delivery-partners/rc-${rcNumber}`
+    const rcImageUrl = await uploadToS3(
+      files.rcImage.buffer,
+      `delivery-partners/rc-${rcNumber}.${files.rcImage.mimetype.split("/")[1]}`
     );
-    const pancardUrl = await uploadToS3(
-      pancard[0],
-      `delivery-partners/pancard-${email}`
+    const pancardImageUrl = await uploadToS3(
+      files.pancard.buffer,
+      `delivery-partners/pancard-${email}.${
+        files.pancard.mimetype.split("/")[1]
+      }`
     );
 
-    const documents = [
-      { type: "license", url: licenseUrl },
-      { type: "rc", url: rcUrl },
-      { type: "pancard", url: pancardUrl },
-    ];
     const deliveryPartner = new DeliveryPartner({
       name,
-      age,
+      age: parseInt(age),
       gender,
       licenseNumber,
       rcNumber,
       email,
       password,
       phone,
-      branch: branchId,
-      documents,
+      licenseImage: licenseImageUrl,
+      rcImage: rcImageUrl,
+      pancard: pancardImageUrl,
       status: "pending",
     });
+
     await deliveryPartner.save();
 
-    await Branch.findByIdAndUpdate(branchId, {
-      $push: { deliveryPartners: deliveryPartner._id },
+    return reply.status(201).send({
+      message: "Delivery partner registered",
+      id: deliveryPartner._id,
     });
-
-    reply
-      .code(201)
-      .send({
-        message: "Delivery partner registered",
-        id: deliveryPartner._id,
-      });
   } catch (error) {
     console.error("Error in registerDeliveryPartner:", error);
-    reply
-      .code(500)
-      .send({ message: "Registration failed", error: error.message });
+    return reply.status(500).send({ message: "Internal server error" });
   }
 };

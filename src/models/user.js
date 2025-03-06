@@ -32,12 +32,36 @@ const deliveryPartnerSchema = new mongoose.Schema({
     longitude: { type: Number },
   },
   address: { type: String },
-  branch: { type: mongoose.Schema.Types.ObjectId, ref: "Branch" },
+  branch: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Branch",
+    required: true,
+  },
   availability: { type: Boolean, default: true },
   currentOrder: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Order",
     default: null,
+  },
+  // New fields for registration and document upload
+  age: { type: Number, required: true },
+  gender: { type: String, enum: ["male", "female", "other"], required: true },
+  licenseNumber: { type: String, required: true, unique: true },
+  rcNumber: { type: String, required: true, unique: true },
+  documents: [
+    {
+      type: {
+        type: String,
+        enum: ["license", "rc", "pancard"],
+        required: true,
+      },
+      url: { type: String, required: true },
+    },
+  ],
+  status: {
+    type: String,
+    enum: ["pending", "approved", "rejected"],
+    default: "pending",
   },
 });
 

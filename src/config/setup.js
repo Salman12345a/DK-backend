@@ -4,6 +4,7 @@ import * as Models from "../models/index.js";
 import AdminJSFastify from "@adminjs/fastify";
 import { authenticate, COOKIE_PASSWORD, sessionStore } from "./config.js";
 import { dark, light, noSidebar } from "@adminjs/themes";
+
 AdminJS.registerAdapter(AdminJSMongoose);
 
 export const admin = new AdminJS({
@@ -18,8 +19,34 @@ export const admin = new AdminJS({
     {
       resource: Models.DeliveryPartner,
       options: {
-        listProperties: ["email", "role", "isActivated"],
-        filterProperties: ["email", "role"],
+        listProperties: [
+          "email",
+          "role",
+          "isActivated",
+          "name",
+          "age",
+          "gender",
+          "licenseNumber",
+          "rcNumber",
+          "status",
+        ],
+        filterProperties: ["email", "role", "status"],
+        properties: {
+          documents: { isVisible: { list: true, show: true, edit: false } },
+          status: { isVisible: { list: true, show: true, edit: true } },
+        },
+        actions: {
+          approveDocuments: {
+            actionType: "record",
+            handler: async (request, response, context) => {
+              const { record } = context;
+              await record.update({ status: "approved", isActivated: true });
+              return { record: record.toJSON() };
+            },
+            buttonLabel: "Approve",
+            isVisible: (record) => record.params.status === "pending",
+          },
+        },
       },
     },
     {
@@ -29,23 +56,12 @@ export const admin = new AdminJS({
         filterProperties: ["email", "role"],
       },
     },
-    {
-      resource: Models.Branch,
-    },
-    {
-      resource: Models.Product,
-    },
-    {
-      resource: Models.Category,
-    },
-    {
-      resource: Models.Order,
-    },
-    {
-      resource: Models.Counter,
-    },
+    { resource: Models.Branch },
+    { resource: Models.Product },
+    { resource: Models.Category },
+    { resource: Models.Order },
+    { resource: Models.Counter },
   ],
-
   branding: {
     companyName: "storesync",
     withMadeWithLove: false,

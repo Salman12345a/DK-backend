@@ -1,30 +1,36 @@
 src/
 ├── config/
-│   ├── config.js
-│   ├── connect.js
-│   └── setup.js
+│   ├── config.js              # Unchanged (assumed for auth config)
+│   ├── connect.js             # MongoDB connection (unchanged)
+│   └── setup.js               # AdminJS setup with fastify-multer registration
 ├── controllers/
 │   ├── auth/
-│   │   └── auth.js
+│   │   └── auth.js            # Unchanged (branch/customer login logic)
 │   ├── order/
-│   │   └── order.js
+│   │   └── order.js           # Unchanged (assumed)
 │   ├── product/
-│   │   ├── category.js
-│   │   └── product.js
-│   └── tracking/
-│       └── user.js
+│   │   ├── category.js        # Unchanged (assumed)
+│   │   └── product.js         # Unchanged (assumed)
+│   ├── tracking/
+│   │   └── user.js            # Unchanged (assumed)
+│   └── deliveryPartner/       # New directory
+│       └── deliveryPartner.js # New controller for registration
 ├── middleware/
-│   └── auth.js
+│   ├── auth.js                # Unchanged (verifyToken, checkBranchRole)
+│   └── upload.js              # New middleware for fastify-multer
 ├── models/
-│   ├── branch.js
-│   ├── category.js
-│   ├── counter.js
-│   ├── index.js
-│   ├── order.js
-│   ├── products.js
-│   └── user.js
-└── routes/
-    ├── auth.js    
-    ├── index.js    
-    ├── order.js    
-    └── product.js 
+│   ├── branch.js              # Unchanged
+│   ├── category.js            # Unchanged (assumed)
+│   ├── counter.js             # Unchanged (assumed)
+│   ├── index.js               # Unchanged (assumed)
+│   ├── order.js               # Unchanged (assumed)
+│   ├── products.js            # Unchanged (assumed)
+│   └── user.js                # Updated with new DeliveryPartner fields
+├── routes/
+│   ├── auth.js                # Unchanged
+│   ├── index.js               # Updated to include deliveryPartnerRoutes
+│   ├── order.js               # Unchanged (assumed)
+│   ├── product.js             # Unchanged (assumed)
+│   └── deliveryPartner.js     # New route for registration
+└── utils/
+    └── s3Upload.js            # New utility for AWS S3 uploads
