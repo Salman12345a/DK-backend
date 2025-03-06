@@ -36,6 +36,27 @@ export const admin = new AdminJS({
           status: { isVisible: { list: true, show: true, edit: true } },
         },
         actions: {
+          list: {
+            before: async (request) => {
+              console.log(
+                "Filters for DeliveryPartner list:",
+                request.query.filters
+              );
+              const validFields = ["email", "role", "status"];
+              const sanitizedFilters = {};
+              if (request.query.filters) {
+                Object.keys(request.query.filters).forEach((key) => {
+                  if (validFields.includes(key)) {
+                    sanitizedFilters[key] = request.query.filters[key];
+                  } else {
+                    console.warn(`Ignoring invalid filter field: ${key}`);
+                  }
+                });
+              }
+              request.query.filters = sanitizedFilters;
+              return request;
+            },
+          },
           approveDocuments: {
             actionType: "record",
             handler: async (request, response, context) => {
@@ -44,7 +65,7 @@ export const admin = new AdminJS({
               return { record: record.toJSON() };
             },
             buttonLabel: "Approve",
-            isVisible: (record) => record.params.status === "pending",
+            isVisible: (record) => record?.params?.status === "pending", // Guard against undefined
           },
         },
       },
