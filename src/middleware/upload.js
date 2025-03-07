@@ -1,31 +1,17 @@
 import multipart from "@fastify/multipart";
 
 export const uploadFiles = async (request, reply) => {
-  console.log("Starting multipart parsing for request:", {
-    url: request.url,
-    headers: request.headers,
-    isMultipart: request.isMultipart(),
-    body: request.body || "No body parsed yet",
-  });
+  const logger = request.log; // Use Fastify's logger
 
   const files = {};
   const fields = {};
   let partCount = 0;
 
-  // First, try using request.parts()
+  // Try parsing multipart data with request.parts()
   try {
-    const parts = request.parts({ limits: { fileSize: 50 * 1024 * 1024 } });
+    const parts = request.parts({ limits: { fileSize: 50 * 1024 * 1024 } }); // 50MB limit
     for await (const part of parts) {
       partCount++;
-      console.log(`Part ${partCount}:`, {
-        type: part.type,
-        fieldname: part.fieldname || "N/A",
-        filename: part.filename || "N/A",
-        mimetype: part.mimetype || "N/A",
-        size: part.file ? (await part.toBuffer()).length : "N/A",
-        isFile: part.file ? true : false,
-        readable: part.readable ? true : false,
-      });
       if (part.type === "file" && part.file && part.readable) {
         if (["licenseImage", "rcImage", "pancard"].includes(part.fieldname)) {
           files[part.fieldname] = {
@@ -39,16 +25,19 @@ export const uploadFiles = async (request, reply) => {
       }
     }
   } catch (error) {
-    console.error("Error parsing parts:", error);
+    logger.error({
+      msg: "Error parsing multipart parts",
+      error: error.message,
+      stack: error.stack,
+    });
+    return reply.status(500).send({
+      message: "Failed to process uploaded files",
+      ...(process.env.NODE_ENV !== "production" && { error: error.message }), // Detailed error in dev only
+    });
   }
 
-  console.log("Total parts received via parts():", partCount);
-  console.log("Files parsed via parts():", Object.keys(files));
-  console.log("Fields parsed via parts():", Object.keys(fields));
-
-  // If no parts were received, try using request.body as a fallback
+  // Fallback to request.body if no parts were received
   if (partCount === 0 && request.body) {
-    console.log("Falling back to request.body...");
     for (const field in request.body) {
       const part = request.body[field];
       if (part.type === "file") {
@@ -63,18 +52,32 @@ export const uploadFiles = async (request, reply) => {
         fields[part.fieldname] = part.value;
       }
     }
-    console.log("Files parsed via request.body:", Object.keys(files));
-    console.log("Fields parsed via request.body:", Object.keys(fields));
   }
 
+  // Validate required files
   if (!files.licenseImage || !files.rcImage || !files.pancard) {
-    return reply
-      .code(400)
-      .send({
-        message:
-          "All required files (licenseImage, rcImage, pancard) must be uploaded",
-      });
+    logger.warn({
+      msg: "Missing required files",
+      missing: [
+        !files.licenseImage && "licenseImage",
+        !files.rcImage && "rcImage",
+        !files.pancard && "pancard",
+      ].filter(Boolean),
+    });
+    return reply.status(400).send({
+      message:
+        "All required files (licenseImage, rcImage, pancard) must be uploaded",
+    });
   }
+
+  // Attach parsed data to request
   request.files = files;
-  request.body = fields; // Populate request.body with text fields
+  request.body = fields;
+
+  // Log success (optional, can be removed in production if not needed)
+  logger.info({
+    msg: "Multipart files parsed successfully",
+    files: Object.keys(files),
+    fields: Object.keys(fields),
+  });
 };

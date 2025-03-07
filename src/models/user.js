@@ -23,9 +23,8 @@ const customerSchema = new mongoose.Schema({
 
 const deliveryPartnerSchema = new mongoose.Schema({
   ...userSchema.obj,
-  email: { type: String, required: true, unique: true },
-  password: { type: String, required: true },
-  phone: { type: Number, required: true },
+
+  phone: { type: Number, required: true, unique: true },
   role: { type: String, enum: ["DeliveryPartner"], default: "DeliveryPartner" },
   liveLocation: {
     latitude: { type: Number },
@@ -63,6 +62,7 @@ const deliveryPartnerSchema = new mongoose.Schema({
     enum: ["pending", "approved", "rejected"],
     default: "pending",
   },
+  rejectionMessage: { type: String, required: false }, // New field
 });
 
 const adminSchema = new mongoose.Schema({

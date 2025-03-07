@@ -61,32 +61,37 @@ export const loginCustomer = async (req, reply) => {
 };
 
 export const loginDeliveryPartner = async (req, reply) => {
-  try {
-    const { email, password } = req.body;
+  const logger = req.log; // Use Fastify's logger for consistency
 
-    if (!email || !password) {
-      return reply
-        .status(400)
-        .send({ message: "Email and password are required" });
+  try {
+    const { phone } = req.body;
+
+    if (!phone) {
+      logger.warn({ msg: "Phone number is required for login" });
+      return reply.status(400).send({ message: "Phone number is required" });
     }
 
-    const deliveryPartner = await DeliveryPartner.findOne({ email });
+    const deliveryPartner = await DeliveryPartner.findOne({ phone });
 
     if (!deliveryPartner) {
+      logger.warn({ msg: "Delivery partner not found", phone });
       return reply.status(404).send({ message: "Delivery partner not found" });
     }
 
     if (!deliveryPartner.isActivated) {
+      logger.warn({ msg: "Delivery partner is not activated", phone });
       return reply
         .status(403)
         .send({ message: "Delivery partner is not activated" });
     }
 
-    if (deliveryPartner.password !== password) {
-      return reply.status(400).send({ message: "Invalid Credentials" });
-    }
-
     const { accessToken, refreshToken } = generateTokens(deliveryPartner);
+
+    logger.info({
+      msg: "Delivery partner logged in successfully",
+      phone,
+      id: deliveryPartner._id,
+    });
 
     return reply.send({
       message: "Login Successful",
@@ -95,31 +100,47 @@ export const loginDeliveryPartner = async (req, reply) => {
       deliveryPartner,
     });
   } catch (error) {
-    console.error("Error in loginDeliveryPartner:", error);
+    logger.error({
+      msg: "Error in loginDeliveryPartner",
+      error: error.message,
+      stack: error.stack,
+    });
     return reply.status(500).send({
       message: "An error occurred",
-      error: error.message || "Unknown error",
+      ...(process.env.NODE_ENV !== "production" && { error: error.message }),
     });
   }
 };
 
 export const loginBranch = async (req, reply) => {
-  try {
-    const { email, password } = req.body;
-    if (!email || !password)
-      return reply
-        .status(400)
-        .send({ message: "Email and password are required" });
+  const logger = req.log; // Use Fastify's logger for consistency
 
-    const branch = await Branch.findOne({ email });
-    if (!branch) return reply.status(404).send({ message: "Branch not found" });
-    if (branch.password !== password)
-      return reply.status(400).send({ message: "Invalid credentials" });
+  try {
+    const { phone } = req.body;
+
+    if (!phone) {
+      logger.warn({ msg: "Phone number is required for login" });
+      return reply.status(400).send({ message: "Phone number is required" });
+    }
+
+    const branch = await Branch.findOne({ phone });
+
+    if (!branch) {
+      logger.warn({ msg: "Branch not found", phone });
+      return reply.status(404).send({ message: "Branch not found" });
+    }
 
     const { accessToken, refreshToken } = generateTokens({
       _id: branch._id,
       role: "Branch",
     });
+
+    logger.info({
+      msg: "Branch logged in successfully",
+      phone,
+      id: branch._id,
+    });
+
     return reply.send({
       message: "Branch login successful",
       accessToken,
@@ -127,13 +148,17 @@ export const loginBranch = async (req, reply) => {
       branch,
     });
   } catch (error) {
-    console.error("Error in loginBranch:", error);
-    return reply
-      .status(500)
-      .send({ message: "Branch login failed", error: error.message });
+    logger.error({
+      msg: "Error in loginBranch",
+      error: error.message,
+      stack: error.stack,
+    });
+    return reply.status(500).send({
+      message: "Branch login failed",
+      ...(process.env.NODE_ENV !== "production" && { error: error.message }),
+    });
   }
 };
-
 export const refreshToken = async (req, reply) => {
   const { refreshToken: token } = req.body;
 

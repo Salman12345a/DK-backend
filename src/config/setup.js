@@ -34,22 +34,20 @@ export const admin = new AdminJS({
         properties: {
           documents: { isVisible: { list: true, show: true, edit: false } },
           status: { isVisible: { list: true, show: true, edit: true } },
+          rejectionMessage: {
+            type: "string",
+            isVisible: { list: false, show: true, edit: false },
+          },
         },
         actions: {
           list: {
             before: async (request) => {
-              console.log(
-                "Filters for DeliveryPartner list:",
-                request.query.filters
-              );
               const validFields = ["email", "role", "status"];
               const sanitizedFilters = {};
               if (request.query.filters) {
                 Object.keys(request.query.filters).forEach((key) => {
                   if (validFields.includes(key)) {
                     sanitizedFilters[key] = request.query.filters[key];
-                  } else {
-                    console.warn(`Ignoring invalid filter field: ${key}`);
                   }
                 });
               }
@@ -59,13 +57,62 @@ export const admin = new AdminJS({
           },
           approveDocuments: {
             actionType: "record",
+            icon: "Check",
+            buttonLabel: "Approve",
+            isVisible: (record) => record?.params?.status === "pending",
             handler: async (request, response, context) => {
               const { record } = context;
               await record.update({ status: "approved", isActivated: true });
-              return { record: record.toJSON() };
+              return {
+                record: record.toJSON(),
+                notice: {
+                  message: "Delivery Partner approved successfully",
+                  type: "success",
+                },
+              };
             },
-            buttonLabel: "Approve",
-            isVisible: (record) => record?.params?.status === "pending", // Guard against undefined
+          },
+          rejectDocuments: {
+            actionType: "record",
+            icon: "X",
+            buttonLabel: "Reject",
+            isVisible: (record) => record?.params?.status === "pending",
+            handler: async (request, response, context) => {
+              const { record, app } = context;
+              const { rejectionMessage } = request.payload || {};
+
+              if (!rejectionMessage) {
+                return {
+                  record: record.toJSON(),
+                  notice: {
+                    message: "Rejection message is required",
+                    type: "error",
+                  },
+                };
+              }
+
+              await record.update({
+                status: "rejected",
+                isActivated: false,
+                rejectionMessage,
+              });
+
+              const branchId = record.params.branch;
+              const io = app.io;
+              io.to(`branch_${branchId}`).emit("deliveryPartnerRejected", {
+                deliveryPartnerId: record.params._id,
+                message: rejectionMessage,
+              });
+
+              return {
+                record: record.toJSON(),
+                notice: {
+                  message:
+                    "Delivery Partner rejected, check Whatsapp for Reason",
+                  type: "success",
+                },
+              };
+            },
           },
         },
       },
