@@ -1,5 +1,6 @@
+import mongoose from "mongoose"; // Add this import
 import Branch from "../models/branch.js";
-import { verifyToken } from "../middleware/auth.js";
+import { verifyToken, checkBranchRole } from "../middleware/auth.js";
 
 export const syncmarts = (fastify, opts, done) => {
   fastify.post(
@@ -12,7 +13,7 @@ export const syncmarts = (fastify, opts, done) => {
       }
 
       const { userId } = req.user;
-      const { storeStatus } = req.body; // Expecting "open" or "closed"
+      const { storeStatus } = req.body;
 
       if (!["open", "closed"].includes(storeStatus)) {
         req.log.warn(`Invalid storeStatus received: ${storeStatus}`);
@@ -27,7 +28,7 @@ export const syncmarts = (fastify, opts, done) => {
         const updatedBranch = await Branch.findByIdAndUpdate(
           userId,
           { storeStatus },
-          { new: true } // Returns updated document
+          { new: true }
         );
 
         if (!updatedBranch) {
@@ -39,7 +40,6 @@ export const syncmarts = (fastify, opts, done) => {
           `Successfully updated storeStatus for userId: ${userId} to ${updatedBranch.storeStatus}`
         );
 
-        // Emit Socket.IO event to the branch-specific room
         const io = fastify.io;
         io.to(userId).emit("syncmart:status", {
           storeStatus: updatedBranch.storeStatus,
@@ -58,7 +58,7 @@ export const syncmarts = (fastify, opts, done) => {
 
   fastify.patch(
     "/syncmarts/delivery",
-    { preHandler: [verifyToken] },
+    { preHandler: [verifyToken, checkBranchRole] },
     async (req, reply) => {
       if (!req.user || !req.user.userId) {
         req.log.error("User data missing or malformed:", req.user);
@@ -66,13 +66,19 @@ export const syncmarts = (fastify, opts, done) => {
       }
 
       const { userId } = req.user;
-      const { enable } = req.body; // Expect { "enable": true/false }
+      const { enable } = req.body;
 
       if (typeof enable !== "boolean") {
         return reply.code(400).send({ message: "Enable must be a boolean" });
       }
 
       try {
+        // Log role and connection state using mongoose directly
+        req.log.info(
+          `Processing request for userId: ${userId}, role: ${req.user.role}`
+        );
+        req.log.info(`DB connection state: ${mongoose.connection.readyState}`);
+
         const branch = await Branch.findById(userId);
         if (!branch) {
           req.log.warn(`Branch not found for userId: ${userId}`);
@@ -92,8 +98,16 @@ export const syncmarts = (fastify, opts, done) => {
           deliveryServiceAvailable: branch.deliveryServiceAvailable,
         });
       } catch (err) {
-        req.log.error(`Database error for userId: ${userId}`, err);
-        return reply.code(500).send({ message: "Internal server error" });
+        req.log.error(`Database error for userId: ${userId}`, {
+          name: err.name,
+          message: err.message,
+          stack: err.stack,
+        });
+        return reply.code(500).send({
+          message: "Internal server error",
+          error:
+            process.env.NODE_ENV !== "production" ? err.message : undefined,
+        });
       }
     }
   );

@@ -31,6 +31,10 @@ src/
 │   ├── index.js               # Updated to include deliveryPartnerRoutes
 │   ├── order.js               # Unchanged (assumed)
 │   ├── product.js             # Unchanged (assumed)
-│   └── deliveryPartner.js     # New route for registration
+│   ├── deliveryPartner.js     # New route for registration
+│   └── syncmarts.js           # Newly added route file
 └── utils/
     └── s3Upload.js            # New utility for AWS S3 uploads
+
+
+    app.js                     # this files is outside of the src directory
