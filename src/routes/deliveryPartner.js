@@ -33,11 +33,10 @@ export const deliveryPartnerRoutes = async function (fastify) {
         const partners = await DeliveryPartner.find({
           branch: branchId,
         }).select("_id status name");
-        return reply.send(partners); // Add return to prevent further execution
+        return reply.send(partners);
       } catch (error) {
         console.error("Fetch Delivery Partners Error:", error);
         return reply.code(500).send({
-          // Add return here too
           status: "ERROR",
           message: "Internal server error",
           code: "SERVER_ERROR",

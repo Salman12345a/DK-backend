@@ -3,42 +3,58 @@ import Branch from "../../models/branch.js";
 import { uploadToS3 } from "../../utils/s3Upload.js";
 
 export const registerDeliveryPartner = async (request, reply) => {
-  const logger = request.log; // Use Fastify's logger
+  const logger = request.log;
 
   try {
     const { name, age, gender, licenseNumber, rcNumber, phone } = request.body;
     const files = request.files;
 
-    // Validate required fields
     if (!phone) {
       logger.warn({ msg: "Phone number is required for registration" });
       return reply.status(400).send({ message: "Phone number is required" });
     }
 
-    // Upload files to S3 and get URLs
     const licenseImageUrl = await uploadToS3(
       files.licenseImage.buffer,
       `delivery-partners/license-${licenseNumber}.${
         files.licenseImage.mimetype.split("/")[1]
       }`,
-      logger
+      logger,
+      files.licenseImage.mimetype
     );
     const rcImageUrl = await uploadToS3(
       files.rcImage.buffer,
       `delivery-partners/rc-${rcNumber}.${
         files.rcImage.mimetype.split("/")[1]
       }`,
-      logger
+      logger,
+      files.rcImage.mimetype
     );
-    const pancardImageUrl = await uploadToS3(
-      files.pancard.buffer,
-      `delivery-partners/pancard-${phone}.${
-        files.pancard.mimetype.split("/")[1]
+    const deliveryPartnerPhotoUrl = await uploadToS3(
+      files.deliveryPartnerPhoto.buffer,
+      `delivery-partners/photo-${phone}.${
+        files.deliveryPartnerPhoto.mimetype.split("/")[1]
       }`,
-      logger
+      logger,
+      files.deliveryPartnerPhoto.mimetype
+    );
+    const aadhaarFrontUrl = await uploadToS3(
+      files.aadhaarFront.buffer,
+      `delivery-partners/aadhaar-front-${phone}.${
+        files.aadhaarFront.mimetype.split("/")[1]
+      }`,
+      logger,
+      files.aadhaarFront.mimetype
+    );
+    const aadhaarBackUrl = await uploadToS3(
+      files.aadhaarBack.buffer,
+      `delivery-partners/aadhaar-back-${phone}.${
+        files.aadhaarBack.mimetype.split("/")[1]
+      }`,
+      logger,
+      files.aadhaarBack.mimetype
     );
 
-    // Create new DeliveryPartner document
     const deliveryPartner = new DeliveryPartner({
       name,
       age: parseInt(age),
@@ -46,19 +62,19 @@ export const registerDeliveryPartner = async (request, reply) => {
       licenseNumber,
       rcNumber,
       phone,
-      branch: request.user.userId, // Set branch to authenticated Branch ID
+      branch: request.user.userId,
       documents: [
         { type: "license", url: licenseImageUrl },
         { type: "rc", url: rcImageUrl },
-        { type: "pancard", url: pancardImageUrl },
+        { type: "photo", url: deliveryPartnerPhotoUrl },
+        { type: "aadhaarFront", url: aadhaarFrontUrl },
+        { type: "aadhaarBack", url: aadhaarBackUrl },
       ],
       status: "pending",
     });
 
-    // Save the DeliveryPartner document
     await deliveryPartner.save();
 
-    // Optional: Update the Branch document to include this DeliveryPartner
     /*
     await Branch.findByIdAndUpdate(
       request.user.userId,

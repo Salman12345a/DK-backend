@@ -23,7 +23,6 @@ const customerSchema = new mongoose.Schema({
 
 const deliveryPartnerSchema = new mongoose.Schema({
   ...userSchema.obj,
-
   phone: { type: Number, required: true, unique: true },
   role: { type: String, enum: ["DeliveryPartner"], default: "DeliveryPartner" },
   liveLocation: {
@@ -42,7 +41,6 @@ const deliveryPartnerSchema = new mongoose.Schema({
     ref: "Order",
     default: null,
   },
-  // New fields for registration and document upload
   age: { type: Number, required: true },
   gender: { type: String, enum: ["male", "female", "other"], required: true },
   licenseNumber: { type: String, required: true, unique: true },
@@ -51,7 +49,7 @@ const deliveryPartnerSchema = new mongoose.Schema({
     {
       type: {
         type: String,
-        enum: ["license", "rc", "pancard"],
+        enum: ["license", "rc", "photo", "aadhaarFront", "aadhaarBack"],
         required: true,
       },
       url: { type: String, required: true },
@@ -62,7 +60,7 @@ const deliveryPartnerSchema = new mongoose.Schema({
     enum: ["pending", "approved", "rejected"],
     default: "pending",
   },
-  rejectionMessage: { type: String, required: false }, // New field
+  rejectionMessage: { type: String, required: false },
 });
 
 const adminSchema = new mongoose.Schema({
