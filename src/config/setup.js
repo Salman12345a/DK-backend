@@ -20,7 +20,7 @@ export const admin = new AdminJS({
       resource: Models.DeliveryPartner,
       options: {
         listProperties: [
-          "email",
+          "phone",
           "role",
           "isActivated",
           "name",
@@ -30,7 +30,7 @@ export const admin = new AdminJS({
           "rcNumber",
           "status",
         ],
-        filterProperties: ["email", "role", "status"],
+        filterProperties: ["phone", "role", "status"],
         properties: {
           documents: { isVisible: { list: true, show: true, edit: false } },
           status: { isVisible: { list: true, show: true, edit: true } },
@@ -42,7 +42,7 @@ export const admin = new AdminJS({
         actions: {
           list: {
             before: async (request) => {
-              const validFields = ["email", "role", "status"];
+              const validFields = ["phone", "role", "status"];
               const sanitizedFilters = {};
               if (request.query.filters) {
                 Object.keys(request.query.filters).forEach((key) => {

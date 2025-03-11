@@ -23,7 +23,7 @@ const customerSchema = new mongoose.Schema({
 
 const deliveryPartnerSchema = new mongoose.Schema({
   ...userSchema.obj,
-  phone: { type: Number, required: true, unique: true },
+  phone: { type: Number, required: true },
   role: { type: String, enum: ["DeliveryPartner"], default: "DeliveryPartner" },
   liveLocation: {
     latitude: { type: Number },
