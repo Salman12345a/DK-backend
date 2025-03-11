@@ -1,4 +1,7 @@
-import { registerDeliveryPartner } from "../controllers/deliveryPartner/deliveryPartner.js";
+import {
+  registerDeliveryPartner,
+  modifyDeliveryPartnerDetails,
+} from "../controllers/deliveryPartner/deliveryPartner.js";
 import { verifyToken, checkBranchRole } from "../middleware/auth.js";
 import { uploadFiles } from "../middleware/upload.js";
 import { DeliveryPartner } from "../models/user.js";
@@ -6,6 +9,7 @@ import { DeliveryPartner } from "../models/user.js";
 export const deliveryPartnerRoutes = async function (fastify) {
   console.log("Registering deliveryPartnerRoutes");
 
+  // Existing route: Register a new delivery partner (unchanged)
   fastify.post(
     "/register",
     {
@@ -14,6 +18,7 @@ export const deliveryPartnerRoutes = async function (fastify) {
     registerDeliveryPartner
   );
 
+  // Existing route: Fetch delivery partners for a branch (unchanged)
   fastify.get(
     "/",
     {
@@ -44,5 +49,14 @@ export const deliveryPartnerRoutes = async function (fastify) {
         });
       }
     }
+  );
+
+  // New route: Modify delivery partner details after rejection
+  fastify.patch(
+    "/:id",
+    {
+      preHandler: [verifyToken, checkBranchRole, uploadFiles],
+    },
+    modifyDeliveryPartnerDetails
   );
 };
