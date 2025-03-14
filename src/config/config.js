@@ -39,5 +39,8 @@ export const authenticate = async (email, password) => {
   return null;
 };
 
-export const PORT = process.env.PORT || 3000;
+// Define the port for enterprise consistency
+// Use process.env.PORT if defined (e.g., for cloud hosting), otherwise enforce 3000
+export const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+
 export const COOKIE_PASSWORD = process.env.COOKIE_PASSWORD;
