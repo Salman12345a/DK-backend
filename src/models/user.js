@@ -19,6 +19,7 @@ const customerSchema = new mongoose.Schema({
     longitude: { type: Number },
   },
   address: { type: String },
+  selectedBranch: { type: mongoose.Schema.Types.ObjectId, ref: "Branch" }, // Added field
 });
 
 const deliveryPartnerSchema = new mongoose.Schema({
