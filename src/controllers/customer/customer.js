@@ -1,5 +1,5 @@
 import { Customer } from "../../models/user.js";
-import Branch from "../../models/branch.js"; // Changed to default import
+import Branch from "../../models/branch.js";
 
 export const selectCustomerBranch = async (request, reply) => {
   try {
@@ -49,6 +49,46 @@ export const selectCustomerBranch = async (request, reply) => {
     });
   } catch (error) {
     console.error("Error in selectCustomerBranch:", error);
+    return reply.code(500).send({
+      status: "ERROR",
+      message: "Internal server error",
+      code: "INTERNAL_SERVER_ERROR",
+      systemError: error.message,
+    });
+  }
+};
+
+export const getLastCustomerBranch = async (request, reply) => {
+  try {
+    const customerId = request.user.userId;
+
+    const customer = await Customer.findById(customerId).populate(
+      "selectedBranch"
+    );
+    if (!customer) {
+      return reply.code(404).send({
+        status: "ERROR",
+        message: "Customer not found",
+        code: "CUSTOMER_NOT_FOUND",
+      });
+    }
+
+    const branch = customer.selectedBranch || null;
+    return reply.code(200).send({
+      branch: branch
+        ? {
+            _id: branch._id,
+            name: branch.name,
+            address: branch.address,
+            phone: branch.phone,
+            storeStatus: branch.storeStatus,
+            deliveryServiceAvailable: branch.deliveryServiceAvailable,
+            location: branch.location,
+          }
+        : null,
+    });
+  } catch (error) {
+    console.error("Error in getLastCustomerBranch:", error);
     return reply.code(500).send({
       status: "ERROR",
       message: "Internal server error",

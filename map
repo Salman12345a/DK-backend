@@ -1,40 +1,45 @@
-src/
-├── config/
-│   ├── config.js              # Unchanged (assumed for auth config)
-│   ├── connect.js             # MongoDB connection (unchanged)
-│   └── setup.js               # AdminJS setup with fastify-multer registration
-├── controllers/
-│   ├── auth/
-│   │   └── auth.js            # Unchanged (branch/customer login logic)
-│   ├── order/
-│   │   └── order.js           # Unchanged (assumed)
-│   ├── product/
-│   │   ├── category.js        # Unchanged (assumed)
-│   │   └── product.js         # Unchanged (assumed)
-│   ├── tracking/
-│   │   └── user.js            # Unchanged (assumed)
-│   └── deliveryPartner/       # New directory
-│       └── deliveryPartner.js # New controller for registration
-├── middleware/
-│   ├── auth.js                # Unchanged (verifyToken, checkBranchRole)
-│   └── upload.js              # New middleware for fastify-multer
-├── models/
-│   ├── branch.js              # Unchanged
-│   ├── category.js            # Unchanged (assumed)
-│   ├── counter.js             # Unchanged (assumed)
-│   ├── index.js               # Unchanged (assumed)
-│   ├── order.js               # Unchanged (assumed)
-│   ├── products.js            # Unchanged (assumed)
-│   └── user.js                # Updated with new DeliveryPartner fields
-├── routes/
-│   ├── auth.js                # Unchanged
-│   ├── index.js               # Updated to include deliveryPartnerRoutes
-│   ├── order.js               # Unchanged (assumed)
-│   ├── product.js             # Unchanged (assumed)
-│   ├── deliveryPartner.js     # New route for registration
-│   └── syncmarts.js           # Newly added route file
-└── utils/
-    └── s3Upload.js            # New utility for AWS S3 uploads
-
-
-    app.js                     # this files is outside of the src directory
+StoreSync-Backend/
+├── src/
+│   ├── config/
+│   │   ├── config.js              # Unchanged
+│   │   ├── connect.js             # Unchanged
+│   │   └── setup.js               # Unchanged
+│   ├── controllers/
+│   │   ├── auth/
+│   │   │   └── auth.js            # Unchanged
+│   │   ├── order/
+│   │   │   └── order.js           # Unchanged
+│   │   ├── product/
+│   │   │   ├── category.js        # Unchanged
+│   │   │   └── product.js         # Unchanged
+│   │   ├── tracking/
+│   │   │   └── user.js            # Unchanged
+│   │   ├── deliveryPartner/
+│   │   │   └── deliveryPartner.js # Unchanged
+│   │   ├── customer/
+│   │   │   └── customer.js        # Updated with getLastCustomerBranch
+│   │   └── branch/                # New directory
+│   │       └── branch.js          # New controller for branch (e.g., nearby)
+│   ├── middleware/
+│   │   ├── auth.js                # Unchanged
+│   │   └── upload.js              # Unchanged
+│   ├── models/
+│   │   ├── branch.js              # Unchanged
+│   │   ├── category.js            # Unchanged
+│   │   ├── counter.js             # Unchanged
+│   │   ├── index.js               # Unchanged
+│   │   ├── order.js               # Unchanged
+│   │   ├── products.js            # Unchanged
+│   │   └── user.js                # Unchanged
+│   ├── routes/
+│   │   ├── auth.js                # Unchanged
+│   │   ├── index.js               # Updated
+│   │   ├── order.js               # Unchanged
+│   │   ├── product.js             # Unchanged
+│   │   ├── deliveryPartner.js     # Unchanged
+│   │   ├── syncmarts.js           # Unchanged
+│   │   ├── customer.js            # Updated with GET /last-branch
+│   │   └── branch.js              # New route file (e.g., for nearby)
+│   └── utils/
+│       └── s3Upload.js            # Unchanged
+└── app.js                         # Updated
