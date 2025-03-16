@@ -73,9 +73,17 @@ const start = async () => {
     io.on("connection", (socket) => {
       console.log("A User Connected");
 
+      // Existing room joining for orders
       socket.on("joinRoom", (orderId) => {
         socket.join(orderId);
         console.log(`User joined room ${orderId}`);
+      });
+
+      // New event for branch to join its syncmart room
+      socket.on("joinSyncmartRoom", (phone) => {
+        const room = `syncmart_${phone}`;
+        socket.join(room);
+        console.log(`Branch joined room ${room}`);
       });
 
       socket.on("discount", () => {

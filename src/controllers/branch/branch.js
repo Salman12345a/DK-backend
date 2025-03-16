@@ -1,5 +1,5 @@
 import Branch from "../../models/branch.js";
-import { uploadToS3Branch } from "../../utils/s3UploadBranch.js"; // Updated import
+import { uploadToS3Branch } from "../../utils/s3UploadBranch.js";
 
 // Controller to find nearby branches
 export const getNearbyBranches = async (request, reply) => {
@@ -39,6 +39,7 @@ export const getNearbyBranches = async (request, reply) => {
 // Controller to register a new branch
 export const registerBranch = async (request, reply) => {
   const logger = request.log;
+  const io = request.server.io; // Access Socket.IO instance
 
   try {
     // Extract parsed data from middleware
@@ -155,18 +156,32 @@ export const registerBranch = async (request, reply) => {
       closingTime,
       ownerName,
       govId,
-      deliveryServiceAvailable: homeDelivery === "true", // Convert string to boolean
-      selfPickup: selfPickup === "true", // Convert string to boolean
+      deliveryServiceAvailable: homeDelivery === "true",
+      selfPickup: selfPickup === "true",
       branchfrontImage: branchfrontImageUrl,
       ownerIdProof: ownerIdProofUrl,
       ownerPhoto: ownerPhotoUrl,
-      deliveryPartners: [], // Default empty array
-      storeStatus: "open", // Default value
+      deliveryPartners: [],
+      storeStatus: "open",
       createdAt: new Date(),
     });
 
     // Save the branch to the database
     await newBranch.save();
+
+    // Emit WebSocket event to notify the branch (syncmart)
+    const branchData = {
+      branchId: newBranch._id,
+      phone: newBranch.phone,
+      name: newBranch.name,
+      createdAt: newBranch.createdAt,
+    };
+    io.to(`syncmart_${phone}`).emit("branchRegistered", branchData);
+    logger.info({
+      msg: "Branch registration event emitted",
+      branchId: newBranch._id,
+      phone,
+    });
 
     logger.info({
       msg: "Branch registered successfully",
