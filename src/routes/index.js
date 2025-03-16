@@ -1,4 +1,3 @@
-// StoreSync-Backend/src/routes/index.js
 import fastify from "fastify";
 import { authRoutes } from "./auth.js";
 import { categoryRoutes, productRoutes } from "./product.js";
@@ -22,8 +21,9 @@ export const registerRoutes = async (fastifyInstance) => {
     fastifyInstance.register(deliveryPartnerRoutes, {
       prefix: `${prefix}/delivery-partner`,
     });
-    fastifyInstance.register(branchRoutes, { prefix: `${prefix}/branch` });
-    fastifyInstance.register(customerRoutes, { prefix: `${prefix}/customer` }); // Adjusted prefix
+    // Changed from /api/branch to /api to allow /api/register/branch
+    fastifyInstance.register(branchRoutes, { prefix: `${prefix}` });
+    fastifyInstance.register(customerRoutes, { prefix: `${prefix}/customer` });
 
     // Log all registered routes for debugging
     fastifyInstance.log.info("Registered routes:", fastifyInstance.routes);
