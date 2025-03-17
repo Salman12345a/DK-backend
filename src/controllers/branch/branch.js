@@ -1,5 +1,6 @@
 import Branch from "../../models/branch.js";
 import { uploadToS3Branch } from "../../utils/s3UploadBranch.js";
+import jwt from "jsonwebtoken"; // Added import for generating JWT token
 
 // Controller to find nearby branches
 export const getNearbyBranches = async (request, reply) => {
@@ -169,6 +170,13 @@ export const registerBranch = async (request, reply) => {
     // Save the branch to the database
     await newBranch.save();
 
+    // Generate a new JWT token for the branch
+    const accessToken = jwt.sign(
+      { branchId: newBranch._id, phone: newBranch.phone, role: "Branch" },
+      process.env.ACCESS_TOKEN_SECRET,
+      { expiresIn: "1h" }
+    );
+
     // Emit WebSocket event to notify the branch (syncmart)
     const branchData = {
       branchId: newBranch._id,
@@ -187,9 +195,13 @@ export const registerBranch = async (request, reply) => {
       msg: "Branch registered successfully",
       branchId: newBranch._id,
     });
-    return reply
-      .status(201)
-      .send({ message: "Branch registered successfully", branch: newBranch });
+
+    // Include accessToken in the response
+    return reply.status(201).send({
+      message: "Branch registered successfully",
+      branch: newBranch,
+      accessToken, // Added accessToken to the response
+    });
   } catch (error) {
     logger.error({
       msg: "Error registering branch",
