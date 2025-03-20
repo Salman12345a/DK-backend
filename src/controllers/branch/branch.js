@@ -1,8 +1,7 @@
 import Branch from "../../models/branch.js";
+import jwt from "jsonwebtoken";
 import { uploadToS3Branch } from "../../utils/s3UploadBranch.js";
-import jwt from "jsonwebtoken"; // Added import for generating JWT token
 
-// Controller to find nearby branches
 export const getNearbyBranches = async (request, reply) => {
   try {
     const { lat, lng, radius = 2 } = request.query;
@@ -37,16 +36,12 @@ export const getNearbyBranches = async (request, reply) => {
   }
 };
 
-// Controller to register a new branch
 export const registerBranch = async (request, reply) => {
   const logger = request.log;
-  const io = request.server.io; // Access Socket.IO instance
+  const io = request.server.io;
 
   try {
-    // Extract parsed data from middleware
     const { files, body } = request;
-
-    // Extract JSON fields from request.body
     const {
       branchName,
       branchLocation,
@@ -61,7 +56,6 @@ export const registerBranch = async (request, reply) => {
       phone,
     } = body;
 
-    // Validate required fields
     if (
       !branchName ||
       !branchLocation ||
@@ -83,7 +77,6 @@ export const registerBranch = async (request, reply) => {
       return reply.status(400).send({ error: "Missing required fields" });
     }
 
-    // Parse nested objects (branchLocation, branchAddress)
     let parsedLocation, parsedAddress;
     try {
       parsedLocation = JSON.parse(branchLocation);
@@ -98,7 +91,6 @@ export const registerBranch = async (request, reply) => {
         .send({ error: "Invalid branchLocation or branchAddress format" });
     }
 
-    // Validate nested fields
     if (!parsedLocation.latitude || !parsedLocation.longitude) {
       return reply.status(400).send({ error: "Invalid branch location" });
     }
@@ -111,7 +103,6 @@ export const registerBranch = async (request, reply) => {
       return reply.status(400).send({ error: "Invalid branch address" });
     }
 
-    // Upload files to S3 and get their URLs using the branch-specific utility
     const timestamp = Date.now();
     const branchfrontImageUrl = await uploadToS3Branch(
       files.branchfrontImage.buffer,
@@ -138,13 +129,12 @@ export const registerBranch = async (request, reply) => {
       files.ownerPhoto.mimetype
     );
 
-    // Create a new branch document
     const newBranch = new Branch({
       phone,
       name: branchName,
       location: {
         type: "Point",
-        coordinates: [parsedLocation.longitude, parsedLocation.latitude], // [longitude, latitude]
+        coordinates: [parsedLocation.longitude, parsedLocation.latitude],
       },
       address: {
         street: parsedAddress.street,
@@ -164,43 +154,44 @@ export const registerBranch = async (request, reply) => {
       ownerPhoto: ownerPhotoUrl,
       deliveryPartners: [],
       storeStatus: "open",
+      status: "pending",
       createdAt: new Date(),
     });
 
-    // Save the branch to the database
-    await newBranch.save();
+    const savedBranch = await newBranch.save();
+    console.log(`Branch saved with status: ${savedBranch.status}`);
 
-    // Generate a new JWT token for the branch
     const accessToken = jwt.sign(
-      { branchId: newBranch._id, phone: newBranch.phone, role: "Branch" },
+      { branchId: savedBranch._id, phone: savedBranch.phone, role: "Branch" },
       process.env.ACCESS_TOKEN_SECRET,
       { expiresIn: "1h" }
     );
 
-    // Emit WebSocket event to notify the branch (syncmart)
     const branchData = {
-      branchId: newBranch._id,
-      phone: newBranch.phone,
-      name: newBranch.name,
-      createdAt: newBranch.createdAt,
+      branchId: savedBranch._id,
+      phone: savedBranch.phone,
+      status: savedBranch.status,
     };
     io.to(`syncmart_${phone}`).emit("branchRegistered", branchData);
+    console.log(
+      `Emitting branchRegistered event to syncmart_${phone} with status: ${savedBranch.status}`
+    );
     logger.info({
       msg: "Branch registration event emitted",
-      branchId: newBranch._id,
+      branchId: savedBranch._id,
       phone,
+      status: savedBranch.status,
     });
 
     logger.info({
       msg: "Branch registered successfully",
-      branchId: newBranch._id,
+      branchId: savedBranch._id,
     });
 
-    // Include accessToken in the response
     return reply.status(201).send({
       message: "Branch registered successfully",
-      branch: newBranch,
-      accessToken, // Added accessToken to the response
+      branch: savedBranch,
+      accessToken,
     });
   } catch (error) {
     logger.error({
@@ -211,5 +202,130 @@ export const registerBranch = async (request, reply) => {
     return reply
       .status(500)
       .send({ error: "Failed to register branch", details: error.message });
+  }
+};
+
+export const updateBranchStatus = async (request, reply) => {
+  const logger = request.log;
+  const io = request.server.io;
+
+  try {
+    const { branchId } = request.params;
+    const { status } = request.body;
+
+    console.log(`Updating status for branchId: ${branchId} to ${status}`);
+
+    if (!["approved", "rejected"].includes(status)) {
+      logger.warn({ msg: "Invalid status value", status });
+      return reply.status(400).send({ error: "Invalid status value" });
+    }
+
+    const branch = await Branch.findById(branchId);
+    if (!branch) {
+      logger.warn({ msg: "Branch not found", branchId });
+      return reply.status(404).send({ error: "Branch not found" });
+    }
+
+    branch.status = status;
+    branch.accessToken = jwt.sign(
+      {
+        branchId: branch._id,
+        phone: branch.phone,
+        role: "Branch",
+      },
+      process.env.ACCESS_TOKEN_SECRET || "your-secret-key",
+      { expiresIn: "30d" }
+    );
+
+    const updatedBranch = await branch.save();
+    console.log(
+      `Branch ${branchId} status updated to: ${updatedBranch.status}`
+    );
+    console.log(`Generated accessToken: ${updatedBranch.accessToken}`);
+    console.log(`Branch phone for emission: ${updatedBranch.phone}`);
+
+    const branchData = {
+      branchId: updatedBranch._id,
+      phone: updatedBranch.phone,
+      status: updatedBranch.status,
+      accessToken: updatedBranch.accessToken,
+    };
+    const room = `syncmart_${updatedBranch.phone}`;
+    console.log(
+      `Emitting branchStatusUpdated to room: ${room} with data:`,
+      branchData
+    );
+    io.to(room).emit("branchStatusUpdated", branchData);
+    console.log(
+      `Emitted branchStatusUpdated event to ${room} with status: ${updatedBranch.status}`
+    );
+    logger.info({
+      msg: "Branch status update event emitted",
+      branchId: updatedBranch._id,
+      phone: updatedBranch.phone,
+      status: updatedBranch.status,
+    });
+
+    return reply.status(200).send({
+      message: "Branch status updated successfully",
+      branch: {
+        _id: updatedBranch._id,
+        status: updatedBranch.status,
+        phone: updatedBranch.phone,
+        accessToken: updatedBranch.accessToken,
+      },
+    });
+  } catch (error) {
+    logger.error({
+      msg: "Error updating branch status",
+      error: error.message,
+      stack: error.stack,
+    });
+    return reply.status(500).send({
+      error: "Failed to update branch status",
+      details: error.message,
+    });
+  }
+};
+
+export const getBranchStatus = async (request, reply) => {
+  const logger = request.log;
+
+  try {
+    const { branchId } = request.params;
+
+    if (!branchId) {
+      logger.warn({ msg: "Missing branchId parameter" });
+      return reply.status(400).send({ error: "Missing branchId parameter" });
+    }
+
+    const branch = await Branch.findById(branchId).select("status phone name");
+    if (!branch) {
+      logger.warn({ msg: "Branch not found", branchId });
+      return reply.status(404).send({ error: "Branch not found" });
+    }
+
+    logger.info({
+      msg: "Branch status retrieved successfully",
+      branchId,
+      status: branch.status,
+    });
+
+    return reply.status(200).send({
+      branchId: branch._id,
+      phone: branch.phone,
+      name: branch.name,
+      status: branch.status,
+    });
+  } catch (error) {
+    logger.error({
+      msg: "Error retrieving branch status",
+      error: error.message,
+      stack: error.stack,
+    });
+    return reply.status(500).send({
+      error: "Failed to retrieve branch status",
+      details: error.message,
+    });
   }
 };

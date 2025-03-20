@@ -8,20 +8,12 @@ const s3Client = new S3Client({
   },
 });
 
-/**
- * Uploads a file to S3 and returns the public URL, using a specific bucket for branch files.
- * @param {Buffer} buffer - The file buffer to upload
- * @param {string} key - The S3 object key (path)
- * @param {object} logger - Fastify logger instance for structured logging
- * @param {string} mimetype - The MIME type of the file (e.g., "image/jpeg")
- * @returns {string} - The public URL of the uploaded file
- */
 export const uploadToS3Branch = async (buffer, key, logger, mimetype) => {
   const params = {
-    Bucket: process.env.S3_BRANCH_BUCKET, // Changed to a different bucket for branches
+    Bucket: process.env.S3_BRANCH_BUCKET,
     Key: key,
     Body: Buffer.from(buffer),
-    ContentType: mimetype, // Dynamic MIME type
+    ContentType: mimetype,
   };
 
   try {

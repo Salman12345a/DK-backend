@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+
 const branchSchema = new mongoose.Schema({
   phone: { type: String, required: true, unique: true },
   name: { type: String, required: true },
@@ -30,10 +31,10 @@ const branchSchema = new mongoose.Schema({
     type: String,
     enum: ["pending", "approved", "rejected"],
     default: "pending",
-  }, // Added status field
+  },
   createdAt: { type: Date, default: Date.now },
 });
-// Add 2dsphere index for geospatial queries
+
 branchSchema.index({ location: "2dsphere" });
 
 const Branch = mongoose.model("Branch", branchSchema, "branches");

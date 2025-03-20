@@ -131,11 +131,11 @@ export const admin = new AdminJS({
     { resource: Models.Counter },
   ],
   branding: {
-    companyName: "storesync",
+    companyName: "DoKirana",
     withMadeWithLove: false,
     favicon:
-      "https://moodbanao.net/wp-content/uploads/2024/11/Untitled-design-8-modified.png",
-    logo: "https://moodbanao.net/wp-content/uploads/2024/11/Untitled-design-8-modified.png",
+      "https://storesync-bucket.s3.eu-north-1.amazonaws.com/uploads/Do+Kirana.png",
+    logo: "https://storesync-bucket.s3.eu-north-1.amazonaws.com/uploads/Do+Kirana.png",
   },
   defaultTheme: dark.id,
   rootPath: "/admin",

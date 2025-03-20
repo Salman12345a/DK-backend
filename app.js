@@ -71,7 +71,7 @@ const start = async () => {
 
     const io = app.io;
     io.on("connection", (socket) => {
-      console.log("A User Connected");
+      console.log("A User Connected:", socket.id);
 
       // Existing room joining for orders
       socket.on("joinRoom", (orderId) => {
@@ -79,13 +79,34 @@ const start = async () => {
         console.log(`User joined room ${orderId}`);
       });
 
-      // New event for branch to join its syncmart room
+      // Room joining for branch registration status updates
       socket.on("joinSyncmartRoom", (phone) => {
         const room = `syncmart_${phone}`;
         socket.join(room);
-        console.log(`Branch joined room ${room}`);
+        console.log(
+          `Client ${socket.id} joined syncmart room: ${room} for phone: ${phone}`
+        );
       });
 
+      // Handle branch registration event (for logging/verification, not emission here)
+      socket.on("branchRegistered", (data) => {
+        console.log(
+          "Received branchRegistered from client (unexpected):",
+          data
+        );
+        // Note: Emission happens in controller, not here
+      });
+
+      // Handle branch status update event (for logging/verification, not emission here)
+      socket.on("branchStatusUpdated", (data) => {
+        console.log(
+          "Received branchStatusUpdated from client (unexpected):",
+          data
+        );
+        // Note: Emission happens in controller, not here
+      });
+
+      // Existing events (unchanged)
       socket.on("discount", () => {
         console.log("Discount event received");
       });
@@ -148,10 +169,11 @@ const start = async () => {
       });
 
       socket.on("disconnect", () => {
-        console.log("User Disconnected");
+        console.log("User Disconnected:", socket.id);
       });
     });
 
+    // Graceful shutdown
     process.on("SIGINT", () => {
       io.close();
       app.close();
