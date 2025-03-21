@@ -329,3 +329,115 @@ export const getBranchStatus = async (request, reply) => {
     });
   }
 };
+
+export const modifyBranch = async (request, reply) => {
+  const logger = request.log;
+
+  try {
+    const { branchId } = request.params;
+    const {
+      branchName,
+      location,
+      address,
+      branchEmail,
+      openingTime,
+      closingTime,
+      ownerName,
+      govId,
+      phone,
+      homeDelivery,
+      selfPickup,
+      branchfrontImage,
+      ownerIdProof,
+      ownerPhoto,
+    } = request.body;
+
+    if (!branchId) {
+      logger.warn({ msg: "Missing branchId parameter" });
+      return reply.status(400).send({ error: "Missing branchId parameter" });
+    }
+
+    const branch = await Branch.findById(branchId);
+    if (!branch) {
+      logger.warn({ msg: "Branch not found", branchId });
+      return reply.status(404).send({ error: "Branch not found" });
+    }
+
+    // Update only the fields provided in the request
+    if (branchName) branch.name = branchName;
+    if (location) {
+      if (
+        !location.type ||
+        location.type !== "Point" ||
+        !Array.isArray(location.coordinates) ||
+        location.coordinates.length !== 2
+      ) {
+        logger.warn({ msg: "Invalid location format", location });
+        return reply.status(400).send({ error: "Invalid branch location" });
+      }
+      branch.location = {
+        type: "Point",
+        coordinates: [location.coordinates[0], location.coordinates[1]], // [longitude, latitude]
+      };
+    }
+    if (address) {
+      if (
+        !address.street ||
+        !address.area ||
+        !address.city ||
+        !address.pincode
+      ) {
+        logger.warn({ msg: "Invalid address format", address });
+        return reply.status(400).send({ error: "Invalid branch address" });
+      }
+      branch.address = {
+        street: address.street,
+        area: address.area,
+        city: address.city,
+        pincode: address.pincode,
+      };
+    }
+    if (branchEmail) branch.branchEmail = branchEmail;
+    if (openingTime) branch.openingTime = openingTime;
+    if (closingTime) branch.closingTime = closingTime;
+    if (ownerName) branch.ownerName = ownerName;
+    if (govId) branch.govId = govId;
+    if (phone) branch.phone = phone;
+    if (typeof homeDelivery !== "undefined")
+      branch.deliveryServiceAvailable = homeDelivery;
+    if (typeof selfPickup !== "undefined") branch.selfPickup = selfPickup;
+    if (branchfrontImage) branch.branchfrontImage = branchfrontImage;
+    if (ownerIdProof) branch.ownerIdProof = ownerIdProof;
+    if (ownerPhoto) branch.ownerPhoto = ownerPhoto;
+
+    // Update status from "rejected" to "pending" on resubmission
+    if (branch.status === "rejected") {
+      branch.status = "pending";
+      logger.info({
+        msg: "Branch status updated from rejected to pending",
+        branchId: branch._id,
+      });
+    }
+
+    const updatedBranch = await branch.save();
+    logger.info({
+      msg: "Branch details modified successfully",
+      branchId: updatedBranch._id,
+    });
+
+    return reply.status(200).send({
+      message: "Branch details modified successfully",
+      branch: updatedBranch,
+    });
+  } catch (error) {
+    logger.error({
+      msg: "Error modifying branch details",
+      error: error.message,
+      stack: error.stack,
+    });
+    return reply.status(500).send({
+      error: "Failed to modify branch details",
+      details: error.message,
+    });
+  }
+};
