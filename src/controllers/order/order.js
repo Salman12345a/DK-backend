@@ -251,9 +251,12 @@ export const createOrder = async (req, reply) => {
       items: itemsWithPrices,
       branch,
       totalPrice,
-      status: "placed",
-      deliveryServiceAvailable: branchData.deliveryPartners?.length > 0,
-      statusHistory: [{ status: "placed" }],
+      status: "accepted", // Start as "accepted" for customer orders
+      deliveryServiceAvailable: branchData.deliveryServiceAvailable, // Fixed as per your confirmation
+      statusHistory: [
+        { status: "placed" }, // Record "placed" in history
+        { status: "accepted" }, // Immediately accepted
+      ],
       deliveryLocation: {
         latitude: customer.liveLocation?.latitude || defaultLocation.latitude,
         longitude:
@@ -266,11 +269,6 @@ export const createOrder = async (req, reply) => {
         address: branchData.address || defaultLocation.address,
       },
     });
-
-    if (newOrder.deliveryServiceAvailable) {
-      newOrder.status = "accepted";
-      newOrder.statusHistory.push({ status: "accepted" });
-    }
 
     const savedOrder = await newOrder.save();
     req.server.io.emit("newOrder", {
@@ -286,7 +284,6 @@ export const createOrder = async (req, reply) => {
       .send({ message: "Order creation failed", error: err.message });
   }
 };
-
 // Other functions modified similarly (removing req.server.io.to, adding req.server.io.emit)
 export const acceptOrder = async (req, reply) => {
   try {

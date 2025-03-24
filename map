@@ -22,7 +22,9 @@ StoreSync-Backend/
 │   │       └── branch.js          # New controller for branch (e.g., nearby)
 │   ├── middleware/
 │   │   ├── auth.js                # Unchanged
-│   │   └── upload.js              # Unchanged
+│   │   |── upload.js
+│   │   └── uploadBranchFiles.js          # Unchanged
+|   |                  
 │   ├── models/
 │   │   ├── branch.js              # Unchanged
 │   │   ├── category.js            # Unchanged
@@ -41,5 +43,7 @@ StoreSync-Backend/
 │   │   ├── customer.js            # Updated with GET /last-branch
 │   │   └── branch.js              # New route file (e.g., for nearby)
 │   └── utils/
-│       └── s3Upload.js            # Unchanged
+│       |── s3Upload.js
+│       └── s3uploadBranch.js  # New utility for uploading branch files
+|                     # Unchanged
 └── app.js                         # Updated
