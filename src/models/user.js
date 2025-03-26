@@ -37,10 +37,10 @@ const deliveryPartnerSchema = new mongoose.Schema({
     required: true,
   },
   availability: { type: Boolean, default: true },
-  currentOrder: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "Order",
-    default: null,
+  currentOrders: {
+    // Changed from currentOrder
+    type: [{ type: mongoose.Schema.Types.ObjectId, ref: "Order" }],
+    default: [],
   },
   age: { type: Number, required: true },
   gender: { type: String, enum: ["male", "female", "other"], required: true },

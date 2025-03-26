@@ -72,22 +72,33 @@ export const registerDeliveryPartner = async (request, reply) => {
         { type: "aadhaarBack", url: aadhaarBackUrl },
       ],
       status: "pending",
+      availability: true, // Added to ensure new partners are available by default
     });
 
     await deliveryPartner.save();
 
-    /*
-    await Branch.findByIdAndUpdate(
+    // Add the delivery partner to the branch's deliveryPartners array
+    const updatedBranch = await Branch.findByIdAndUpdate(
       request.user.userId,
       { $push: { deliveryPartners: deliveryPartner._id } },
       { new: true }
     );
-    */
+
+    if (!updatedBranch) {
+      logger.warn({
+        msg: "Branch not found for updating deliveryPartners",
+        branchId: request.user.userId,
+      });
+      // Optionally rollback deliveryPartner creation if critical
+      await DeliveryPartner.findByIdAndDelete(deliveryPartner._id);
+      return reply.status(400).send({ message: "Branch not found" });
+    }
 
     logger.info({
       msg: "Delivery partner registered successfully",
       id: deliveryPartner._id,
       phone,
+      branchId: request.user.userId,
     });
 
     return reply.status(201).send({
@@ -106,7 +117,6 @@ export const registerDeliveryPartner = async (request, reply) => {
     });
   }
 };
-
 // Updated modifyDeliveryPartnerDetails function with required files validation
 export const modifyDeliveryPartnerDetails = async (request, reply) => {
   const logger = request.log;

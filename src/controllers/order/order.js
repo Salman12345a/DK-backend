@@ -343,15 +343,19 @@ export const assignDeliveryPartner = async (req, reply) => {
         .status(400)
         .send({ message: "Delivery service not available" });
     }
-    if (!partner.availability) {
-      return reply.status(400).send({ message: "Partner unavailable" });
-    }
+    // Removed availability check to allow multiple assignments
+    // Optional: Add a capacity limit (e.g., partner.currentOrders.length < 5)
 
     order.status = "assigned";
-    order.deliveryPartner = partnerId;
+    order.deliveryPartner = partnerId; // Keep this for backward compatibility or remove if not needed
     order.statusHistory.push({ status: "assigned" });
-    partner.availability = false;
-    partner.currentOrder = orderId;
+
+    // Add order to partner's currentOrders array
+    if (!partner.currentOrders.includes(orderId)) {
+      partner.currentOrders.push(orderId);
+    }
+    // Keep availability true unless manually toggled or capacity reached
+    // Example: partner.availability = partner.currentOrders.length < 5;
 
     await Promise.all([order.save(), partner.save()]);
     req.server.io.emit("orderAssigned", {
@@ -444,10 +448,14 @@ export const updateOrderStatus = async (req, reply) => {
     });
 
     if (["delivered", "cancelled"].includes(status)) {
-      await DeliveryPartner.findByIdAndUpdate(userId, {
-        availability: true,
-        $unset: { currentOrder: "" },
-      });
+      const partner = await DeliveryPartner.findById(userId);
+      partner.currentOrders = partner.currentOrders.filter(
+        (id) => id.toString() !== orderId
+      );
+      if (partner.currentOrders.length === 0) {
+        partner.availability = true;
+      }
+      await partner.save();
     }
 
     return reply.send(order);
@@ -485,9 +493,18 @@ export const getOrders = async (req, reply) => {
 
 export const getOrderById = async (req, reply) => {
   try {
-    const order = await Order.findById(req.params.orderId).populate(
-      "customer branch deliveryPartner items.item"
-    );
+    const order = await Order.findById(req.params.orderId).populate([
+      { path: "customer" },
+      {
+        path: "branch",
+        populate: {
+          path: "deliveryPartners",
+          select: "name phone availability",
+        },
+      },
+      { path: "deliveryPartner" },
+      { path: "items.item" },
+    ]);
 
     return order
       ? reply.send(order)
