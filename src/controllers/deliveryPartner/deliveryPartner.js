@@ -2,7 +2,6 @@ import { DeliveryPartner } from "../../models/user.js";
 import Branch from "../../models/branch.js";
 import { uploadToS3 } from "../../utils/s3Upload.js";
 
-// Existing registerDeliveryPartner function (unchanged)
 export const registerDeliveryPartner = async (request, reply) => {
   const logger = request.log;
 
@@ -72,12 +71,11 @@ export const registerDeliveryPartner = async (request, reply) => {
         { type: "aadhaarBack", url: aadhaarBackUrl },
       ],
       status: "pending",
-      availability: true, // Added to ensure new partners are available by default
+      availability: true,
     });
 
     await deliveryPartner.save();
 
-    // Add the delivery partner to the branch's deliveryPartners array
     const updatedBranch = await Branch.findByIdAndUpdate(
       request.user.userId,
       { $push: { deliveryPartners: deliveryPartner._id } },
@@ -89,7 +87,6 @@ export const registerDeliveryPartner = async (request, reply) => {
         msg: "Branch not found for updating deliveryPartners",
         branchId: request.user.userId,
       });
-      // Optionally rollback deliveryPartner creation if critical
       await DeliveryPartner.findByIdAndDelete(deliveryPartner._id);
       return reply.status(400).send({ message: "Branch not found" });
     }
@@ -117,23 +114,21 @@ export const registerDeliveryPartner = async (request, reply) => {
     });
   }
 };
-// Updated modifyDeliveryPartnerDetails function with required files validation
+
 export const modifyDeliveryPartnerDetails = async (request, reply) => {
   const logger = request.log;
 
   try {
-    const { id } = request.params; // Extract delivery partner ID from URL
+    const { id } = request.params;
     const { name, age, gender, licenseNumber, rcNumber, phone } = request.body;
-    const files = request.files || {}; // Files are optional for modification
+    const files = request.files || {};
 
-    // Find the delivery partner by ID
     const deliveryPartner = await DeliveryPartner.findById(id);
     if (!deliveryPartner) {
       logger.warn({ msg: "Delivery partner not found", id });
       return reply.status(404).send({ message: "Delivery partner not found" });
     }
 
-    // Check if the delivery partner belongs to the requesting branch
     if (deliveryPartner.branch.toString() !== request.user.userId) {
       logger.warn({
         msg: "Unauthorized: Branch does not own this delivery partner",
@@ -146,7 +141,6 @@ export const modifyDeliveryPartnerDetails = async (request, reply) => {
       });
     }
 
-    // Check if the status is "rejected"
     if (deliveryPartner.status !== "rejected") {
       logger.warn({
         msg: "Modification not allowed: Status is not rejected",
@@ -158,7 +152,6 @@ export const modifyDeliveryPartnerDetails = async (request, reply) => {
       });
     }
 
-    // Prepare updates for text fields (only update if provided in the request)
     const updates = {};
     if (name) updates.name = name;
     if (age) updates.age = parseInt(age);
@@ -167,10 +160,7 @@ export const modifyDeliveryPartnerDetails = async (request, reply) => {
     if (rcNumber) updates.rcNumber = rcNumber;
     if (phone) updates.phone = phone;
 
-    // Handle document updates if new files are provided
-    const updatedDocuments = [...deliveryPartner.documents]; // Copy existing documents
-
-    // Check if any file is provided; if so, all required files must be uploaded
+    const updatedDocuments = [...deliveryPartner.documents];
     const hasAnyFile =
       files.licenseImage ||
       files.rcImage ||
@@ -193,13 +183,11 @@ export const modifyDeliveryPartnerDetails = async (request, reply) => {
           id,
         });
         return reply.status(400).send({
-          message:
-            "All required files (licenseImage, rcImage, deliveryPartnerPhoto, aadhaarFront, aadhaarBack) must be uploaded",
+          message: "All required files must be uploaded",
         });
       }
     }
 
-    // Process file uploads if all required files are provided
     if (hasAnyFile) {
       if (files.licenseImage) {
         const licenseImageUrl = await uploadToS3(
@@ -284,23 +272,12 @@ export const modifyDeliveryPartnerDetails = async (request, reply) => {
       }
     }
 
-    // Apply updates to the delivery partner
     Object.assign(deliveryPartner, updates);
-    if (hasAnyFile) deliveryPartner.documents = updatedDocuments; // Update documents only if files were provided
-
-    // Reset status to "pending" after modification for admin re-approval
+    if (hasAnyFile) deliveryPartner.documents = updatedDocuments;
     deliveryPartner.status = "pending";
-    deliveryPartner.rejectionMessage = null; // Clear rejection message after modification
+    deliveryPartner.rejectionMessage = null;
 
     await deliveryPartner.save();
-
-    // Optionally emit a socket.io event to notify the admin (similar to rejection in setup.js)
-    // Note: This assumes you have access to the Fastify instance's io object
-    // const io = request.server.io;
-    // io.to(`admin_room`).emit("deliveryPartnerModified", {
-    //   deliveryPartnerId: deliveryPartner._id,
-    //   message: "Delivery partner details modified by branch, awaiting re-approval",
-    // });
 
     logger.info({
       msg: "Delivery partner details modified successfully",
@@ -323,5 +300,36 @@ export const modifyDeliveryPartnerDetails = async (request, reply) => {
       message: "Internal server error",
       ...(process.env.NODE_ENV !== "production" && { error: error.message }),
     });
+  }
+};
+
+export const checkPartnerAvailability = async (request, reply) => {
+  const logger = request.log;
+  try {
+    const { branchId } = request.query;
+    if (!branchId) {
+      logger.warn({ msg: "Branch ID is required" });
+      return reply.status(400).send({ message: "Branch ID is required" });
+    }
+
+    const availablePartners = await DeliveryPartner.find({
+      branch: branchId,
+      availability: true,
+    }).lean();
+
+    const isAvailable = availablePartners.length > 0;
+    logger.info({
+      msg: "Checked delivery partner availability",
+      branchId,
+      isAvailable,
+    });
+
+    return reply.status(200).send({ isAvailable });
+  } catch (error) {
+    logger.error({
+      msg: "Error in checkPartnerAvailability",
+      error: error.message,
+    });
+    return reply.status(500).send({ message: "Internal server error" });
   }
 };

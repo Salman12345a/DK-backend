@@ -17,11 +17,10 @@ export const registerRoutes = async (fastifyInstance) => {
     });
     fastifyInstance.register(productRoutes, { prefix: `${prefix}/products` });
     fastifyInstance.register(orderRoutes, { prefix: `${prefix}/orders` });
-    fastifyInstance.register(syncmarts, { prefix: `${prefix}` });
+    fastifyInstance.register(syncmarts, { prefix: `${prefix}/syncmarts` }); // Changed from `${prefix}`
     fastifyInstance.register(deliveryPartnerRoutes, {
       prefix: `${prefix}/delivery-partner`,
     });
-    // Changed from /api/branch to /api to allow /api/register/branch
     fastifyInstance.register(branchRoutes, { prefix: `${prefix}` });
     fastifyInstance.register(customerRoutes, { prefix: `${prefix}/customer` });
 

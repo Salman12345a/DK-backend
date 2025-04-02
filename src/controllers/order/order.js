@@ -110,7 +110,6 @@ export const modifyOrder = async (req, reply) => {
 
     await order.save();
 
-    // Emit to Socket.IO in app.js
     req.server.io.emit("orderModified", {
       branchId,
       orderId: order._id,
@@ -167,7 +166,6 @@ export const markOrderAsPacked = async (req, reply) => {
     order.statusHistory.push({ status: "packed" });
     await order.save();
 
-    // Emit to Socket.IO in app.js
     const lastModification =
       order.modificationHistory.length > 0
         ? order.modificationHistory.slice(-1)[0].changes
@@ -187,7 +185,7 @@ export const markOrderAsPacked = async (req, reply) => {
         "Your order is packed! Here are the updated details based on availability.",
     });
 
-    if (order.deliveryServiceAvailable) {
+    if (order.deliveryEnabled) {
       const branch = await Branch.findById(order.branch).populate(
         "deliveryPartners",
         "_id"
@@ -218,7 +216,7 @@ export const markOrderAsPacked = async (req, reply) => {
 export const createOrder = async (req, reply) => {
   try {
     const { userId } = req.user;
-    const { items, branch } = req.body;
+    const { items, branch, deliveryEnabled } = req.body;
 
     if (!items?.length || !branch) {
       return reply.status(400).send({ message: "Missing required fields" });
@@ -246,17 +244,29 @@ export const createOrder = async (req, reply) => {
       0
     );
 
+    // Real-time check for delivery availability, only approved partners
+    const availablePartners = await DeliveryPartner.find({
+      branch,
+      status: "approved", // Ensure only approved partners count
+      availability: true,
+    }).limit(1);
+    const isDeliveryAvailable =
+      branchData.deliveryServiceAvailable && availablePartners.length > 0;
+
+    // Set deliveryEnabled based on request and availability
+    const finalDeliveryEnabled =
+      typeof deliveryEnabled === "boolean" && isDeliveryAvailable
+        ? deliveryEnabled
+        : false;
+
     const newOrder = new Order({
       customer: userId,
       items: itemsWithPrices,
       branch,
       totalPrice,
-      status: "accepted", // Start as "accepted" for customer orders
-      deliveryServiceAvailable: branchData.deliveryServiceAvailable, // Fixed as per your confirmation
-      statusHistory: [
-        { status: "placed" }, // Record "placed" in history
-        { status: "accepted" }, // Immediately accepted
-      ],
+      status: "accepted",
+      deliveryEnabled: finalDeliveryEnabled,
+      statusHistory: [{ status: "placed" }, { status: "accepted" }],
       deliveryLocation: {
         latitude: customer.liveLocation?.latitude || defaultLocation.latitude,
         longitude:
@@ -284,7 +294,7 @@ export const createOrder = async (req, reply) => {
       .send({ message: "Order creation failed", error: err.message });
   }
 };
-// Other functions modified similarly (removing req.server.io.to, adding req.server.io.emit)
+
 export const acceptOrder = async (req, reply) => {
   try {
     const { orderId } = req.params;
@@ -338,24 +348,19 @@ export const assignDeliveryPartner = async (req, reply) => {
     if (order.status !== "packed") {
       return reply.status(400).send({ message: "Order must be packed first" });
     }
-    if (!order.deliveryServiceAvailable) {
+    if (!order.deliveryEnabled) {
       return reply
         .status(400)
-        .send({ message: "Delivery service not available" });
+        .send({ message: "Delivery not enabled for this order" });
     }
-    // Removed availability check to allow multiple assignments
-    // Optional: Add a capacity limit (e.g., partner.currentOrders.length < 5)
 
     order.status = "assigned";
-    order.deliveryPartner = partnerId; // Keep this for backward compatibility or remove if not needed
+    order.deliveryPartner = partnerId;
     order.statusHistory.push({ status: "assigned" });
 
-    // Add order to partner's currentOrders array
     if (!partner.currentOrders.includes(orderId)) {
       partner.currentOrders.push(orderId);
     }
-    // Keep availability true unless manually toggled or capacity reached
-    // Example: partner.availability = partner.currentOrders.length < 5;
 
     await Promise.all([order.save(), partner.save()]);
     req.server.io.emit("orderAssigned", {
@@ -467,7 +472,6 @@ export const updateOrderStatus = async (req, reply) => {
   }
 };
 
-// getOrders and getOrderById remain unchanged (no Socket.IO usage)
 export const getOrders = async (req, reply) => {
   try {
     const { status, branchId, customerId, partnerId } = req.query;

@@ -36,7 +36,8 @@ const deliveryPartnerSchema = new mongoose.Schema({
     ref: "Branch",
     required: true,
   },
-  availability: { type: Boolean, default: true },
+  availability: { type: Boolean, default: false },
+
   currentOrders: {
     // Changed from currentOrder
     type: [{ type: mongoose.Schema.Types.ObjectId, ref: "Order" }],

@@ -1,21 +1,24 @@
 import {
   selectCustomerBranch,
   getLastCustomerBranch,
-} from "../controllers/customer/customer.js"; // Add new import
+  getDeliveryServiceStatus,
+} from "../controllers/customer/customer.js";
 import { verifyToken } from "../middleware/auth.js";
 
 export default async function customerRoutes(fastify, options) {
-  // POST /api/customer/select-branch
   fastify.post(
     "/select-branch",
     { preHandler: [verifyToken] },
     selectCustomerBranch
   );
-
-  // GET /api/customer/last-branch
   fastify.get(
     "/last-branch",
     { preHandler: [verifyToken] },
     getLastCustomerBranch
+  );
+  fastify.get(
+    "/delivery-status",
+    { preHandler: [verifyToken] },
+    getDeliveryServiceStatus
   );
 }

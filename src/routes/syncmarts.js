@@ -1,10 +1,11 @@
-import mongoose from "mongoose"; // Add this import
+import mongoose from "mongoose";
 import Branch from "../models/branch.js";
+import { getSyncmartStatus } from "../controllers/syncmarts/syncmarts.js";
 import { verifyToken, checkBranchRole } from "../middleware/auth.js";
 
 export const syncmarts = (fastify, opts, done) => {
   fastify.post(
-    "/syncmarts/status",
+    "/status", // Changed from "/syncmarts/status"
     { preHandler: [verifyToken] },
     async (req, reply) => {
       if (!req.user || !req.user.userId) {
@@ -57,7 +58,7 @@ export const syncmarts = (fastify, opts, done) => {
   );
 
   fastify.patch(
-    "/syncmarts/delivery",
+    "/delivery", // Unchanged
     { preHandler: [verifyToken, checkBranchRole] },
     async (req, reply) => {
       if (!req.user || !req.user.userId) {
@@ -73,7 +74,6 @@ export const syncmarts = (fastify, opts, done) => {
       }
 
       try {
-        // Log role and connection state using mongoose directly
         req.log.info(
           `Processing request for userId: ${userId}, role: ${req.user.role}`
         );
@@ -110,6 +110,43 @@ export const syncmarts = (fastify, opts, done) => {
         });
       }
     }
+  );
+
+  fastify.get(
+    "/delivery",
+    { preHandler: [verifyToken] },
+    async (req, reply) => {
+      if (!req.user || !req.user.userId) {
+        req.log.error("User data missing or malformed:", req.user);
+        return reply.code(401).send({ message: "Unauthorized" });
+      }
+
+      const { userId } = req.user;
+
+      try {
+        const branch = await Branch.findById(userId);
+        if (!branch) {
+          req.log.warn(`Branch not found for userId: ${userId}`);
+          return reply.code(404).send({ message: "SyncMart not found" });
+        }
+
+        return reply.send({
+          deliveryServiceAvailable: branch.deliveryServiceAvailable,
+        });
+      } catch (err) {
+        req.log.error(
+          `Error fetching delivery status for userId: ${userId}`,
+          err
+        );
+        return reply.code(500).send({ message: "Internal server error" });
+      }
+    }
+  );
+
+  fastify.get(
+    "/status", // Changed from "/syncmarts/status"
+    { preHandler: [verifyToken] },
+    getSyncmartStatus
   );
 
   done();

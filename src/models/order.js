@@ -3,10 +3,7 @@ import Counter from "./counter.js";
 
 const orderSchema = new mongoose.Schema(
   {
-    orderId: {
-      type: String,
-      unique: true,
-    },
+    orderId: { type: String, unique: true },
     customer: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Customer",
@@ -24,14 +21,8 @@ const orderSchema = new mongoose.Schema(
           ref: "Product",
           required: true,
         },
-        count: {
-          type: Number,
-          required: true,
-        },
-        price: {
-          type: Number,
-          required: true,
-        },
+        count: { type: Number, required: true },
+        price: { type: Number, required: true },
       },
     ],
     branch: {
@@ -52,63 +43,37 @@ const orderSchema = new mongoose.Schema(
       ],
       default: "placed",
     },
-    deliveryServiceAvailable: {
-      type: Boolean,
-      default: false,
-    },
+    deliveryEnabled: { type: Boolean, default: false }, // Sole delivery flag
     statusHistory: [
       {
         status: String,
-        timestamp: {
-          type: Date,
-          default: Date.now,
-        },
+        timestamp: { type: Date, default: Date.now },
       },
     ],
-    totalPrice: {
-      type: Number,
-      required: true,
-    },
+    totalPrice: { type: Number, required: true },
     modifiedAt: Date,
     modificationHistory: [
       {
-        modifiedBy: {
-          type: mongoose.Schema.Types.ObjectId,
-          ref: "Branch",
-        },
+        modifiedBy: { type: mongoose.Schema.Types.ObjectId, ref: "Branch" },
         changes: [String],
-        timestamp: {
-          type: Date,
-          default: Date.now,
-        },
+        timestamp: { type: Date, default: Date.now },
       },
     ],
-    createdAt: {
-      type: Date,
-      default: Date.now,
+    createdAt: { type: Date, default: Date.now },
+    updatedAt: { type: Date, default: Date.now },
+    deliveryLocation: {
+      latitude: { type: Number, default: 0 },
+      longitude: { type: Number, default: 0 },
+      address: { type: String, default: "No address available" },
     },
-    updatedAt: {
-      type: Date,
-      default: Date.now,
+    pickupLocation: {
+      latitude: { type: Number, default: 0 },
+      longitude: { type: Number, default: 0 },
+      address: { type: String, default: "No address available" },
     },
   },
-  {
-    strictPopulate: false,
-  }
+  { strictPopulate: false }
 );
-
-orderSchema.pre("validate", async function (next) {
-  try {
-    const branch = await mongoose.model("Branch").findById(this.branch);
-    if (!branch) return next(new Error("Branch not found"));
-    if (!branch.deliveryServiceAvailable) {
-      this.deliveryServiceAvailable = false;
-    }
-    next();
-  } catch (error) {
-    next(error);
-  }
-});
 
 async function getNextSequenceValue(sequenceName) {
   const sequenceDocument = await Counter.findOneAndUpdate(

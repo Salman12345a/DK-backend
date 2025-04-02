@@ -26,7 +26,7 @@ const branchSchema = new mongoose.Schema({
   deliveryPartners: [
     { type: mongoose.Schema.Types.ObjectId, ref: "DeliveryPartner" },
   ],
-  storeStatus: { type: String, enum: ["open", "closed"], default: "open" },
+  storeStatus: { type: String, enum: ["open", "closed"], default: "closed" },
   status: {
     type: String,
     enum: ["pending", "approved", "rejected"],
