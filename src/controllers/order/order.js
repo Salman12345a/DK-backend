@@ -247,7 +247,7 @@ export const createOrder = async (req, reply) => {
     // Real-time check for delivery availability, only approved partners
     const availablePartners = await DeliveryPartner.find({
       branch,
-      status: "approved", // Ensure only approved partners count
+      status: "approved",
       availability: true,
     }).limit(1);
     const isDeliveryAvailable =
@@ -518,5 +518,38 @@ export const getOrderById = async (req, reply) => {
     return reply
       .status(500)
       .send({ message: "Failed to fetch order", error: err.message });
+  }
+};
+
+// New function: Check delivery availability
+export const getDeliveryAvailability = async (req, reply) => {
+  try {
+    const { branchId } = req.params;
+
+    // Fetch branch data
+    const branch = await Branch.findById(branchId);
+    if (!branch) {
+      console.error(`Branch not found for branchId: ${branchId}`);
+      return reply.status(404).send({ message: "Branch not found" });
+    }
+
+    // Check for available delivery partners (mirrors createOrder logic)
+    const availablePartners = await DeliveryPartner.find({
+      branch: branchId,
+      status: "approved",
+      availability: true,
+    }).limit(1); // Limit to 1 for efficiency, we just need to know if any exist
+
+    // Compute isDeliveryAvailable
+    const isDeliveryAvailable =
+      branch.deliveryServiceAvailable && availablePartners.length > 0;
+
+    return reply.status(200).send({ isDeliveryAvailable });
+  } catch (err) {
+    console.error("Delivery Availability Check Error:", err);
+    return reply.status(500).send({
+      message: "Failed to check delivery availability",
+      error: err.message,
+    });
   }
 };

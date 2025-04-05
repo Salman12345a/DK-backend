@@ -25,7 +25,7 @@ export const branchRoutes = async (fastify) => {
     done();
   });
 
-  fastify.get("/nearby", async (request, reply) => {
+  fastify.get("/branch/nearby", async (request, reply) => {
     console.log("Handling GET /nearby");
     return getNearbyBranches(request, reply);
   });

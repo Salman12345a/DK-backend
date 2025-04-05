@@ -13,9 +13,9 @@ export const registerRoutes = async (fastifyInstance) => {
   try {
     fastifyInstance.register(authRoutes, { prefix: `${prefix}/auth` });
     fastifyInstance.register(categoryRoutes, {
-      prefix: `${prefix}/categories`,
+      prefix: `${prefix}`,
     });
-    fastifyInstance.register(productRoutes, { prefix: `${prefix}/products` });
+    fastifyInstance.register(productRoutes, { prefix: `${prefix}` });
     fastifyInstance.register(orderRoutes, { prefix: `${prefix}/orders` });
     fastifyInstance.register(syncmarts, { prefix: `${prefix}/syncmarts` }); // Changed from `${prefix}`
     fastifyInstance.register(deliveryPartnerRoutes, {

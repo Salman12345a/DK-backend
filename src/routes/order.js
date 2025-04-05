@@ -7,15 +7,14 @@ import {
   getOrders,
   getOrderById,
   orderCancel,
-  modifyOrder, // Added explicitly for clarity
+  modifyOrder,
+  getDeliveryAvailability, // New import for the controller function
 } from "../controllers/order/order.js";
 import { verifyToken } from "../middleware/auth.js";
-
-// Assuming checkBranchRole exists elsewhere
-import { checkBranchRole } from "../middleware/auth.js"; // Adjust path if needed
+import { checkBranchRole } from "../middleware/auth.js";
 
 export const orderRoutes = async (fastify, options) => {
-  // Global authentication hook (kept for consistency, could be selective later)
+  // Global authentication hook
   fastify.addHook("preHandler", async (request, reply) => {
     const isAuthenticated = await verifyToken(request, reply);
     if (!isAuthenticated) {
@@ -67,4 +66,39 @@ export const orderRoutes = async (fastify, options) => {
   // Order retrieval
   fastify.get("/", getOrders);
   fastify.get("/:orderId", getOrderById);
+
+  // New endpoint: Check delivery availability
+  fastify.get("/delivery-availability/:branchId", {
+    schema: {
+      params: {
+        type: "object",
+        properties: {
+          branchId: { type: "string" },
+        },
+        required: ["branchId"],
+      },
+      response: {
+        200: {
+          type: "object",
+          properties: {
+            isDeliveryAvailable: { type: "boolean" },
+          },
+        },
+        404: {
+          type: "object",
+          properties: {
+            message: { type: "string" },
+          },
+        },
+        500: {
+          type: "object",
+          properties: {
+            message: { type: "string" },
+            error: { type: "string" },
+          },
+        },
+      },
+    },
+    handler: getDeliveryAvailability,
+  });
 };
