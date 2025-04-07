@@ -14,7 +14,6 @@ const start = async () => {
       ignoreTrailingSlash: true,
     });
 
-    // Enhanced error handling
     app.setErrorHandler((error, request, reply) => {
       app.log.error(error);
       reply.status(500).send({
@@ -23,7 +22,6 @@ const start = async () => {
       });
     });
 
-    // Socket.IO setup
     app.register(fastifySocketIO, {
       cors: {
         origin:
@@ -41,15 +39,8 @@ const start = async () => {
       return this.redirect(url, code);
     });
 
-    // Build AdminJS first to register multipart
-    console.log("Building AdminJS router (should register multipart)...");
+    console.log("Building AdminJS router...");
     await buildAdminRouter(app);
-    console.log(
-      "Multipart available after AdminJS:",
-      app.hasPlugin("@fastify/multipart")
-    );
-
-    // Register routes after AdminJS
     console.log("Registering routes...");
     await registerRoutes(app);
 
@@ -57,10 +48,6 @@ const start = async () => {
     console.log(
       "Server ready with plugins:",
       Array.from(app.pluginNames || [])
-    );
-    console.log(
-      "Multipart available after ready:",
-      app.hasPlugin("@fastify/multipart")
     );
 
     await app.listen({
@@ -73,13 +60,18 @@ const start = async () => {
     io.on("connection", (socket) => {
       console.log("A User Connected:", socket.id);
 
-      // Existing room joining for orders
       socket.on("joinRoom", (orderId) => {
         socket.join(orderId);
         console.log(`User joined room ${orderId}`);
       });
 
-      // Room joining for branch registration status updates
+      // Added: Allow customer to join their room
+      socket.on("joinCustomerRoom", (customerId) => {
+        const room = `customer_${customerId}`;
+        socket.join(room);
+        console.log(`Customer ${socket.id} joined room: ${room}`);
+      });
+
       socket.on("joinSyncmartRoom", (phone) => {
         const room = `syncmart_${phone}`;
         socket.join(room);
@@ -88,25 +80,20 @@ const start = async () => {
         );
       });
 
-      // Handle branch registration event (for logging/verification, not emission here)
       socket.on("branchRegistered", (data) => {
         console.log(
           "Received branchRegistered from client (unexpected):",
           data
         );
-        // Note: Emission happens in controller, not here
       });
 
-      // Handle branch status update event (for logging/verification, not emission here)
       socket.on("branchStatusUpdated", (data) => {
         console.log(
           "Received branchStatusUpdated from client (unexpected):",
           data
         );
-        // Note: Emission happens in controller, not here
       });
 
-      // Existing events (unchanged)
       socket.on("discount", () => {
         console.log("Discount event received");
       });
@@ -150,7 +137,13 @@ const start = async () => {
       });
 
       socket.on("orderPackedForPickup", (data) => {
+        console.log("Emitting orderPackedForPickup:", data);
         io.to(`customer_${data.customerId}`).emit("orderPackedForPickup", data);
+        io.to(data.orderId).emit("orderStatusUpdate", {
+          orderId: data.orderId,
+          status: "packed",
+          manuallyCollected: data.manuallyCollected || false,
+        });
       });
 
       socket.on("orderAssigned", (data) => {
@@ -165,7 +158,12 @@ const start = async () => {
       });
 
       socket.on("statusUpdate", (data) => {
-        io.to(data.orderId).emit("statusUpdate", data);
+        console.log("Received statusUpdate from client:", data);
+        io.to(data.orderId).emit("orderStatusUpdate", {
+          orderId: data.orderId,
+          status: data.status,
+          manuallyCollected: data.manuallyCollected || false,
+        });
       });
 
       socket.on("disconnect", () => {
@@ -173,7 +171,6 @@ const start = async () => {
       });
     });
 
-    // Graceful shutdown
     process.on("SIGINT", () => {
       io.close();
       app.close();

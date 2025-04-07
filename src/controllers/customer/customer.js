@@ -149,3 +149,64 @@ export const getDeliveryServiceStatus = async (request, reply) => {
     });
   }
 };
+
+// Add this new function at the end of the file
+export const updateLocation = async (request, reply) => {
+  try {
+    const customerId = request.user.userId;
+    const { latitude, longitude } = request.body;
+
+    // Validate input
+    if (typeof latitude !== "number" || typeof longitude !== "number") {
+      return reply.code(400).send({
+        status: "ERROR",
+        message: "Valid latitude and longitude are required",
+        code: "INVALID_COORDINATES",
+      });
+    }
+
+    // Fetch customer
+    const customer = await Customer.findById(customerId);
+    if (!customer) {
+      return reply.code(404).send({
+        status: "ERROR",
+        message: "Customer not found",
+        code: "CUSTOMER_NOT_FOUND",
+      });
+    }
+
+    // Ensure the user is a Customer
+    if (customer.role !== "Customer") {
+      return reply.code(403).send({
+        status: "ERROR",
+        message: "Only customers can update their location",
+        code: "UNAUTHORIZED_ROLE",
+      });
+    }
+
+    // Update liveLocation
+    customer.liveLocation = { latitude, longitude };
+    await customer.save();
+
+    // Return updated customer data (consistent with selectCustomerBranch)
+    return reply.code(200).send({
+      customer: {
+        _id: customer._id,
+        selectedBranch: customer.selectedBranch,
+        name: customer.name,
+        phone: customer.phone,
+        role: customer.role,
+        liveLocation: customer.liveLocation,
+        address: customer.address,
+      },
+    });
+  } catch (error) {
+    console.error("Error in updateLocation:", error);
+    return reply.code(500).send({
+      status: "ERROR",
+      message: "Internal server error",
+      code: "INTERNAL_SERVER_ERROR",
+      systemError: error.message,
+    });
+  }
+};

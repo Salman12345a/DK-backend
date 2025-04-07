@@ -9,6 +9,7 @@ import {
   orderCancel,
   modifyOrder,
   getDeliveryAvailability, // New import for the controller function
+  markOrderAsCollected,
 } from "../controllers/order/order.js";
 import { verifyToken } from "../middleware/auth.js";
 import { checkBranchRole } from "../middleware/auth.js";
@@ -62,6 +63,9 @@ export const orderRoutes = async (fastify, options) => {
 
   // Delivery partner actions (Syncer's)
   fastify.patch("/:orderId/status", updateOrderStatus);
+
+  // Order collection (Syncmart)
+  fastify.patch("/:orderId/collected", markOrderAsCollected);
 
   // Order retrieval
   fastify.get("/", getOrders);

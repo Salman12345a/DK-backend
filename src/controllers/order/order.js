@@ -110,6 +110,7 @@ export const modifyOrder = async (req, reply) => {
 
     await order.save();
 
+    req.server.io.to(orderId).emit("orderStatusUpdate", order.toObject());
     req.server.io.emit("orderModified", {
       branchId,
       orderId: order._id,
@@ -117,6 +118,19 @@ export const modifyOrder = async (req, reply) => {
       newTotal: order.totalPrice,
       modifiedAt: order.modifiedAt,
     });
+
+    // Added: Notify customer immediately
+    req.server.io
+      .to(`customer_${order.customer.toString()}`)
+      .emit("orderModifiedForCustomer", {
+        customerId: order.customer.toString(),
+        orderId: order._id,
+        branchId,
+        changes: validation.changes,
+        newTotal: order.totalPrice,
+        modifiedAt: order.modifiedAt,
+        message: "Your order was updated by the branch with these changes.",
+      });
 
     return reply.send({
       status: "SUCCESS",
@@ -142,20 +156,16 @@ export const markOrderAsPacked = async (req, reply) => {
         .status(403)
         .send({ message: "Unauthorized: Branch access required" });
     }
-    if (
-      req.user.userId !==
-      (await Order.findById(orderId).select("branch")).branch.toString()
-    ) {
-      return reply
-        .status(403)
-        .send({ message: "Unauthorized: Branch does not own this order" });
-    }
-
     const order = await Order.findById(orderId).populate(
       "items.item",
       "name price"
     );
     if (!order) return reply.status(404).send({ message: "Order not found" });
+    if (order.branch.toString() !== req.user.userId) {
+      return reply
+        .status(403)
+        .send({ message: "Unauthorized: Branch does not own this order" });
+    }
     if (order.status !== "accepted") {
       return reply
         .status(400)
@@ -163,8 +173,18 @@ export const markOrderAsPacked = async (req, reply) => {
     }
 
     order.status = "packed";
-    order.statusHistory.push({ status: "packed" });
+    order.statusHistory.push({ status: "packed", timestamp: new Date() });
     await order.save();
+
+    console.log(`Order ${orderId} marked as packed`);
+
+    // Emit to orderId room for frontend sync
+    req.server.io.to(orderId).emit("orderStatusUpdate", {
+      orderId,
+      status: "packed",
+      manuallyCollected: order.manuallyCollected || false,
+      ...order.toObject(),
+    });
 
     const lastModification =
       order.modificationHistory.length > 0
@@ -244,7 +264,6 @@ export const createOrder = async (req, reply) => {
       0
     );
 
-    // Real-time check for delivery availability, only approved partners
     const availablePartners = await DeliveryPartner.find({
       branch,
       status: "approved",
@@ -252,8 +271,6 @@ export const createOrder = async (req, reply) => {
     }).limit(1);
     const isDeliveryAvailable =
       branchData.deliveryServiceAvailable && availablePartners.length > 0;
-
-    // Set deliveryEnabled based on request and availability
     const finalDeliveryEnabled =
       typeof deliveryEnabled === "boolean" && isDeliveryAvailable
         ? deliveryEnabled
@@ -281,6 +298,9 @@ export const createOrder = async (req, reply) => {
     });
 
     const savedOrder = await newOrder.save();
+    req.server.io
+      .to(savedOrder._id)
+      .emit("orderStatusUpdate", savedOrder.toObject());
     req.server.io.emit("newOrder", {
       branchId: branch,
       ...savedOrder.toObject(),
@@ -309,10 +329,12 @@ export const acceptOrder = async (req, reply) => {
     order.statusHistory.push({ status: "accepted" });
     await order.save();
 
+    req.server.io.to(orderId).emit("orderStatusUpdate", order.toObject());
     req.server.io.emit("orderAccepted", {
       branchId: order.branch.toString(),
       ...order.toObject(),
     });
+
     return reply.send(order);
   } catch (err) {
     console.error("Accept Order Error:", err);
@@ -363,6 +385,7 @@ export const assignDeliveryPartner = async (req, reply) => {
     }
 
     await Promise.all([order.save(), partner.save()]);
+    req.server.io.to(orderId).emit("orderStatusUpdate", order.toObject());
     req.server.io.emit("orderAssigned", {
       branchId: order.branch.toString(),
       partnerId,
@@ -407,6 +430,7 @@ export const orderCancel = async (req, reply) => {
     order.statusHistory.push({ status: "cancelled" });
     await order.save();
 
+    req.server.io.to(orderId).emit("orderStatusUpdate", order.toObject());
     req.server.io.emit("orderCancelled", {
       branchId: order.branch.toString(),
       customerId: order.customer.toString(),
@@ -447,10 +471,7 @@ export const updateOrderStatus = async (req, reply) => {
     order.statusHistory.push({ status });
     await order.save();
 
-    req.server.io.emit("statusUpdate", {
-      orderId,
-      ...order.toObject(),
-    });
+    req.server.io.to(orderId).emit("orderStatusUpdate", order.toObject());
 
     if (["delivered", "cancelled"].includes(status)) {
       const partner = await DeliveryPartner.findById(userId);
@@ -521,26 +542,20 @@ export const getOrderById = async (req, reply) => {
   }
 };
 
-// New function: Check delivery availability
 export const getDeliveryAvailability = async (req, reply) => {
   try {
     const { branchId } = req.params;
-
-    // Fetch branch data
     const branch = await Branch.findById(branchId);
     if (!branch) {
       console.error(`Branch not found for branchId: ${branchId}`);
       return reply.status(404).send({ message: "Branch not found" });
     }
 
-    // Check for available delivery partners (mirrors createOrder logic)
     const availablePartners = await DeliveryPartner.find({
       branch: branchId,
       status: "approved",
       availability: true,
-    }).limit(1); // Limit to 1 for efficiency, we just need to know if any exist
-
-    // Compute isDeliveryAvailable
+    }).limit(1);
     const isDeliveryAvailable =
       branch.deliveryServiceAvailable && availablePartners.length > 0;
 
@@ -549,6 +564,46 @@ export const getDeliveryAvailability = async (req, reply) => {
     console.error("Delivery Availability Check Error:", err);
     return reply.status(500).send({
       message: "Failed to check delivery availability",
+      error: err.message,
+    });
+  }
+};
+
+export const markOrderAsCollected = async (req, reply) => {
+  try {
+    const { orderId } = req.params;
+    const { userId } = req.user;
+
+    const order = await Order.findById(orderId);
+    if (!order) return reply.status(404).send({ message: "Order not found" });
+    if (order.customer.toString() !== userId) {
+      return reply
+        .status(403)
+        .send({ message: "Unauthorized: Not your order" });
+    }
+    if (order.deliveryEnabled) {
+      return reply.status(400).send({ message: "Not a pickup order" });
+    }
+    if (order.status !== "packed") {
+      return reply.status(400).send({ message: "Order must be packed first" });
+    }
+    if (order.manuallyCollected) {
+      return reply.status(400).send({ message: "Order already collected" });
+    }
+
+    order.status = "delivered";
+    order.manuallyCollected = true;
+    order.statusHistory.push({ status: "delivered", timestamp: new Date() });
+    order.updatedAt = new Date();
+    await order.save();
+
+    req.server.io.to(orderId).emit("orderStatusUpdate", order.toObject());
+
+    return reply.send(order);
+  } catch (err) {
+    console.error("Mark Order As Collected Error:", err);
+    return reply.status(500).send({
+      message: "Failed to mark order as collected",
       error: err.message,
     });
   }

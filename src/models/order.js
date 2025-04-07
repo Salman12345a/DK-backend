@@ -71,6 +71,7 @@ const orderSchema = new mongoose.Schema(
       longitude: { type: Number, default: 0 },
       address: { type: String, default: "No address available" },
     },
+    manuallyCollected: { type: Boolean, default: false }, // Add this
   },
   { strictPopulate: false }
 );
