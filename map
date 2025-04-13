@@ -17,7 +17,9 @@ StoreSync-Backend/
 │   │   ├── deliveryPartner/
 │   │   │   └── deliveryPartner.js # Unchanged
 │   │   ├── customer/
-│   │   │   └── customer.js        # Updated with getLastCustomerBranch
+│   │   │   └── customer.js    
+│   │   ├── wallet/
+│   │   │   └── wallet.js     # Updated with getLastCustomerBranch
 │   │   └── branch/                # New directory
 │   │       └── branch.js          # New controller for branch (e.g., nearby)
 │   ├── middleware/
@@ -31,7 +33,8 @@ StoreSync-Backend/
 │   │   ├── counter.js             # Unchanged
 │   │   ├── index.js               # Unchanged
 │   │   ├── order.js               # Unchanged
-│   │   ├── products.js            # Unchanged
+│   │   ├── products.js    
+|   |   ├── wallet.js       # Unchanged
 │   │   └── user.js                # Unchanged
 │   ├── routes/
 │   │   ├── auth.js                # Unchanged
@@ -40,10 +43,12 @@ StoreSync-Backend/
 │   │   ├── product.js             # Unchanged
 │   │   ├── deliveryPartner.js     # Unchanged
 │   │   ├── syncmarts.js           # Unchanged
-│   │   ├── customer.js            # Updated with GET /last-branch
+│   │   ├── customer.js 
+|   |   ├── wallet.js            # Updated with GET /last-branch
 │   │   └── branch.js              # New route file (e.g., for nearby)
 │   └── utils/
 │       |── s3Upload.js
+│       |-- walletUtils.js  # New utility for uploading branch files
 │       └── s3uploadBranch.js  # New utility for uploading branch files
 |                     # Unchanged
 └── app.js                         # Updated

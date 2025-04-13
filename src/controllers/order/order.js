@@ -2,6 +2,7 @@ import Order from "../../models/order.js";
 import Branch from "../../models/branch.js";
 import { Customer, DeliveryPartner } from "../../models/user.js";
 import Product from "../../models/products.js";
+import { updateWalletWithOrderCharge } from "../../utils/walletUtils.js";
 
 const defaultLocation = {
   latitude: 0,
@@ -473,27 +474,29 @@ export const updateOrderStatus = async (req, reply) => {
 
     req.server.io.to(orderId).emit("orderStatusUpdate", order.toObject());
 
-    // Handle wallet update when order is delivered
+    // Process wallet update when order is delivered
+    let walletUpdateResult = null;
     if (status === "delivered") {
-      try {
-        // Fetch branch to get phone number
-        const branch = await Branch.findById(order.branch);
-        if (branch) {
-          // Emit event to update wallet
-          req.server.io.emit("walletUpdateTrigger", {
-            branchId: order.branch.toString(),
-            orderId: order._id.toString(),
-            totalPrice: order.totalPrice,
-          });
-          console.log(
-            `Emitted walletUpdateTrigger for branch ${branch._id} with order value ${order.totalPrice}`
-          );
-        } else {
-          console.error(`Branch not found for order ${orderId}`);
-        }
-      } catch (walletErr) {
-        console.error("Failed to update wallet:", walletErr);
-        // Don't fail the order status update if wallet update fails
+      walletUpdateResult = await updateWalletWithOrderCharge(
+        order.branch.toString(),
+        order._id.toString(),
+        order.totalPrice,
+        req.server.io
+      );
+
+      if (!walletUpdateResult.success) {
+        req.log.error({
+          msg: "Failed to update wallet for delivered order",
+          error: walletUpdateResult.error,
+          orderId: order._id,
+        });
+      } else {
+        req.log.info({
+          msg: "Wallet updated successfully for delivered order",
+          branchId: order.branch,
+          newBalance: walletUpdateResult.wallet.balance,
+          charge: walletUpdateResult.charge,
+        });
       }
     }
 
@@ -508,7 +511,17 @@ export const updateOrderStatus = async (req, reply) => {
       await partner.save();
     }
 
-    return reply.send(order);
+    // Include wallet update info in response if available
+    const response = order.toObject();
+    if (walletUpdateResult && walletUpdateResult.success) {
+      response.walletUpdate = {
+        branchId: order.branch,
+        newBalance: walletUpdateResult.wallet.balance,
+        charge: walletUpdateResult.charge,
+      };
+    }
+
+    return reply.send(response);
   } catch (err) {
     console.error("Status Update Error:", err);
     return reply
@@ -623,28 +636,46 @@ export const markOrderAsCollected = async (req, reply) => {
 
     req.server.io.to(orderId).emit("orderStatusUpdate", order.toObject());
 
-    // Update wallet balance by deducting platform charge
+    // Update wallet directly with platform charge
+    let walletUpdateResult = null;
     try {
-      const branch = await Branch.findById(order.branch);
-      if (branch) {
-        // Emit event to update wallet
-        req.server.io.emit("walletUpdateTrigger", {
-          branchId: order.branch.toString(),
-          orderId: order._id.toString(),
-          totalPrice: order.totalPrice,
+      walletUpdateResult = await updateWalletWithOrderCharge(
+        order.branch.toString(),
+        order._id.toString(),
+        order.totalPrice,
+        req.server.io
+      );
+
+      if (!walletUpdateResult.success) {
+        req.log.error({
+          msg: "Failed to update wallet for collected order",
+          error: walletUpdateResult.error,
+          orderId: order._id,
         });
-        console.log(
-          `Emitted walletUpdateTrigger for branch ${branch._id} with order value ${order.totalPrice}`
-        );
       } else {
-        console.error(`Branch not found for order ${orderId}`);
+        req.log.info({
+          msg: "Wallet updated successfully for collected order",
+          branchId: order.branch,
+          newBalance: walletUpdateResult.wallet.balance,
+          charge: walletUpdateResult.charge,
+        });
       }
     } catch (walletErr) {
       console.error("Failed to update wallet:", walletErr);
       // Don't fail the order status update if wallet update fails
     }
 
-    return reply.send(order);
+    // Include wallet update info in response if available
+    const response = order.toObject();
+    if (walletUpdateResult && walletUpdateResult.success) {
+      response.walletUpdate = {
+        branchId: order.branch,
+        newBalance: walletUpdateResult.wallet.balance,
+        charge: walletUpdateResult.charge,
+      };
+    }
+
+    return reply.send(response);
   } catch (err) {
     console.error("Mark Order As Collected Error:", err);
     return reply.status(500).send({

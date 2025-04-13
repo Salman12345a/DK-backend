@@ -1,6 +1,9 @@
 import Wallet from "../../models/wallet.js";
 import Branch from "../../models/branch.js"; // For fetching phone
-import { calculatePlatformCharge } from "../../utils/walletUtils.js";
+import {
+  calculatePlatformCharge,
+  updateWalletWithOrderCharge,
+} from "../../utils/walletUtils.js";
 
 // Helper function to find or create a wallet
 const findOrCreateWallet = async (branchId, log = console) => {
@@ -174,93 +177,30 @@ export const setupWalletListener = (io) => {
             return;
           }
 
-          // Calculate platform charge based on order value
-          const charge = calculatePlatformCharge(totalPrice);
-          console.log(
-            `Calculated platform charge: ${charge} for order value: ${totalPrice}`
-          );
-
-          // Create transaction object
-          const transaction = {
+          // Use the same service function for consistency
+          const result = await updateWalletWithOrderCharge(
+            branchId,
             orderId,
-            amount: charge,
-            type: "platform_charge",
-            timestamp: new Date(),
-          };
-
-          // Log the current wallet before update
-          const currentWallet = await Wallet.findOne({ branchId });
-          console.log(
-            `Current wallet before update:`,
-            currentWallet
-              ? {
-                  balance: currentWallet.balance,
-                  transactionCount: currentWallet.transactions.length,
-                }
-              : "No wallet found"
+            totalPrice,
+            io
           );
 
-          // Atomically update the wallet with the platform charge
-          const updatedWallet = await Wallet.findOneAndUpdate(
-            { branchId },
-            {
-              $inc: { balance: -charge },
-              $push: { transactions: transaction },
-            },
-            {
-              new: true, // Return updated document
-              upsert: true, // Create if doesn't exist
-              setDefaultsOnInsert: true, // Apply defaults when upserting
-            }
-          );
-
-          console.log(
-            `Wallet updated successfully. New balance: ${updatedWallet.balance}, Charges applied: ${charge}`
-          );
-
-          // Double-check the wallet after update to verify
-          const verifyWallet = await Wallet.findOne({ branchId });
-          console.log(`Verified wallet after update:`, {
-            balance: verifyWallet.balance,
-            transactionCount: verifyWallet.transactions.length,
-            lastTransaction:
-              verifyWallet.transactions[verifyWallet.transactions.length - 1],
-          });
-
-          // Notify connected clients about the wallet update
-          try {
-            const branch = await Branch.findById(branchId);
-            if (branch && branch.phone) {
-              // Broadcast to the branch's room
-              io.to(`syncmart_${branch.phone}`).emit("walletUpdated", {
-                branchId,
-                newBalance: updatedWallet.balance,
-                transaction: transaction,
-              });
-              console.log(
-                `Emitted walletUpdated event to syncmart_${branch.phone}`
-              );
-            }
-
-            // Also broadcast to a general wallet channel for this branch
-            io.to(`wallet_${branchId}`).emit("walletUpdated", {
-              branchId,
-              newBalance: updatedWallet.balance,
-              transaction: transaction,
-            });
-
-            console.log("Wallet update notification sent", {
-              branchId,
-              newBalance: updatedWallet.balance,
-            });
-          } catch (notifyError) {
+          if (!result.success) {
             console.error(
-              "Error notifying about wallet update:",
-              notifyError.message
+              "Failed to update wallet via socket trigger:",
+              result.error
+            );
+          } else {
+            console.log(
+              `Wallet updated via socket trigger. New balance: ${result.wallet.balance}`
             );
           }
         } catch (error) {
-          console.error("Error updating wallet:", error.message, error.stack);
+          console.error(
+            "Error in wallet update trigger:",
+            error.message,
+            error.stack
+          );
         }
       }
     );
@@ -273,7 +213,7 @@ export const setupWalletListener = (io) => {
       }
     });
 
-    // Listen for direct wallet update requests for testing
+    // Force wallet update for testing (keep this for backward compatibility)
     socket.on("forceWalletUpdate", async ({ branchId, charge }) => {
       try {
         console.log(
