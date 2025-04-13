@@ -468,10 +468,34 @@ export const updateOrderStatus = async (req, reply) => {
     }
 
     order.status = status;
-    order.statusHistory.push({ status });
+    order.statusHistory.push({ status, timestamp: new Date() });
     await order.save();
 
     req.server.io.to(orderId).emit("orderStatusUpdate", order.toObject());
+
+    // Handle wallet update when order is delivered
+    if (status === "delivered") {
+      try {
+        // Fetch branch to get phone number
+        const branch = await Branch.findById(order.branch);
+        if (branch) {
+          // Emit event to update wallet
+          req.server.io.emit("walletUpdateTrigger", {
+            branchId: order.branch.toString(),
+            orderId: order._id.toString(),
+            totalPrice: order.totalPrice,
+          });
+          console.log(
+            `Emitted walletUpdateTrigger for branch ${branch._id} with order value ${order.totalPrice}`
+          );
+        } else {
+          console.error(`Branch not found for order ${orderId}`);
+        }
+      } catch (walletErr) {
+        console.error("Failed to update wallet:", walletErr);
+        // Don't fail the order status update if wallet update fails
+      }
+    }
 
     if (["delivered", "cancelled"].includes(status)) {
       const partner = await DeliveryPartner.findById(userId);
@@ -598,6 +622,27 @@ export const markOrderAsCollected = async (req, reply) => {
     await order.save();
 
     req.server.io.to(orderId).emit("orderStatusUpdate", order.toObject());
+
+    // Update wallet balance by deducting platform charge
+    try {
+      const branch = await Branch.findById(order.branch);
+      if (branch) {
+        // Emit event to update wallet
+        req.server.io.emit("walletUpdateTrigger", {
+          branchId: order.branch.toString(),
+          orderId: order._id.toString(),
+          totalPrice: order.totalPrice,
+        });
+        console.log(
+          `Emitted walletUpdateTrigger for branch ${branch._id} with order value ${order.totalPrice}`
+        );
+      } else {
+        console.error(`Branch not found for order ${orderId}`);
+      }
+    } catch (walletErr) {
+      console.error("Failed to update wallet:", walletErr);
+      // Don't fail the order status update if wallet update fails
+    }
 
     return reply.send(order);
   } catch (err) {

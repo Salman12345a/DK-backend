@@ -65,7 +65,6 @@ const start = async () => {
         console.log(`User joined room ${orderId}`);
       });
 
-      // Added: Allow customer to join their room
       socket.on("joinCustomerRoom", (customerId) => {
         const room = `customer_${customerId}`;
         socket.join(room);
@@ -164,6 +163,29 @@ const start = async () => {
           status: data.status,
           manuallyCollected: data.manuallyCollected || false,
         });
+      });
+
+      socket.on("walletUpdated", (data) => {
+        console.log("Wallet updated event received:", data);
+        // Forward to relevant rooms
+        if (data.branchId) {
+          io.to(`wallet_${data.branchId}`).emit("walletUpdated", data);
+          console.log(`Forwarded walletUpdated to wallet_${data.branchId}`);
+        }
+      });
+
+      socket.on("walletUpdateTrigger", (data) => {
+        console.log("Received walletUpdateTrigger in app.js:", data);
+        // Forward this event to all connected clients
+        io.emit("walletUpdateTrigger", data);
+
+        // Ensure the wallet listener service receives this event directly
+        socket.broadcast.emit("walletUpdateTrigger", data);
+
+        // Additional logging
+        console.log(
+          `Broadcasting walletUpdateTrigger for branchId: ${data.branchId}, total price: ${data.totalPrice}`
+        );
       });
 
       socket.on("disconnect", () => {
