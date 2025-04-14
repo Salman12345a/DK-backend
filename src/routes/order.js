@@ -10,6 +10,7 @@ import {
   modifyOrder,
   getDeliveryAvailability, // New import for the controller function
   markOrderAsCollected,
+  getBranchSalesLast24Hours,
 } from "../controllers/order/order.js";
 import { verifyToken } from "../middleware/auth.js";
 import { checkBranchRole } from "../middleware/auth.js";
@@ -104,5 +105,61 @@ export const orderRoutes = async (fastify, options) => {
       },
     },
     handler: getDeliveryAvailability,
+  });
+
+  // New endpoint: Get branch sales for last 24 hours
+  fastify.get("/:branchId/sales/last24hours", {
+    schema: {
+      params: {
+        type: "object",
+        properties: {
+          branchId: { type: "string" },
+        },
+        required: ["branchId"],
+      },
+      response: {
+        200: {
+          type: "object",
+          properties: {
+            status: { type: "string" },
+            data: {
+              type: "object",
+              properties: {
+                branchId: { type: "string" },
+                timeRange: {
+                  type: "object",
+                  properties: {
+                    from: { type: "string", format: "date-time" },
+                    to: { type: "string", format: "date-time" },
+                  },
+                },
+                orderCount: { type: "number" },
+                totalSales: { type: "number" },
+                itemSales: { type: "object" },
+                currency: { type: "string" },
+              },
+            },
+          },
+        },
+        403: {
+          type: "object",
+          properties: {
+            status: { type: "string" },
+            message: { type: "string" },
+            code: { type: "string" },
+          },
+        },
+        500: {
+          type: "object",
+          properties: {
+            status: { type: "string" },
+            message: { type: "string" },
+            code: { type: "string" },
+            systemError: { type: "string" },
+          },
+        },
+      },
+    },
+    handler: getBranchSalesLast24Hours,
   });
 };

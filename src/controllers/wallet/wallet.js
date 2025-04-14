@@ -25,13 +25,8 @@ export const getWalletBalance = async (request, reply) => {
   try {
     const { branchId } = request.params;
 
-    // Force refresh from database instead of using potentially stale cached data
-    await Wallet.findOne({ branchId }).lean(); // Flush any pending changes
-
-    // Get fresh wallet data with no caching
-    const wallet = await Wallet.findOne({ branchId }, {}, { lean: true })
-      .select("balance transactions")
-      .exec();
+    // Get fresh wallet data
+    const wallet = await Wallet.findOne({ branchId }).lean();
 
     if (!wallet) {
       // Create a new wallet if one doesn't exist
@@ -45,17 +40,13 @@ export const getWalletBalance = async (request, reply) => {
       console.log(
         `Created new wallet for branch: ${branchId}, initial balance: 0`
       );
-      return reply.status(200).send({ balance: 0, isNew: true });
+      return reply.status(200).send({ balance: 0 });
     }
 
     console.log(
-      `Retrieved wallet for branch: ${branchId}, current balance: ${wallet.balance}, transaction count: ${wallet.transactions.length}`
+      `Retrieved wallet for branch: ${branchId}, current balance: ${wallet.balance}`
     );
-    return reply.status(200).send({
-      balance: wallet.balance,
-      transactionCount: wallet.transactions.length,
-      isNew: false,
-    });
+    return reply.status(200).send({ balance: wallet.balance });
   } catch (error) {
     request.log.error({
       msg: "Error getting wallet balance",
@@ -91,23 +82,31 @@ export const postWalletPayment = async (request, reply) => {
       return reply.status(400).send({ error: "Invalid payment amount" });
     }
 
-    // Get wallet as non-lean document for modifications
-    let wallet = await Wallet.findOne({ branchId });
-    if (!wallet) {
-      wallet = new Wallet({ branchId, balance: 0, transactions: [] });
-    }
-
-    wallet.balance += amount;
-    wallet.transactions.push({
+    // Create transaction
+    const transaction = {
       amount,
       type: "payment",
       timestamp: new Date(),
-    });
+    };
 
-    await wallet.save();
-    return reply
-      .status(200)
-      .send({ message: "Payment added", newBalance: wallet.balance });
+    // Using findOneAndUpdate with $inc for atomic operation to ensure correct balance
+    const updatedWallet = await Wallet.findOneAndUpdate(
+      { branchId },
+      {
+        $inc: { balance: amount }, // Add amount to balance
+        $push: { transactions: transaction },
+      },
+      {
+        new: true, // Return updated document
+        upsert: true, // Create if doesn't exist
+        setDefaultsOnInsert: true, // Apply defaults when upserting
+      }
+    );
+
+    return reply.status(200).send({
+      message: "Payment added",
+      newBalance: updatedWallet.balance,
+    });
   } catch (error) {
     request.log.error({
       msg: "Error adding wallet payment",
@@ -258,85 +257,4 @@ export const setupWalletListener = (io) => {
       }
     });
   });
-};
-
-export const manualWalletUpdate = async (request, reply) => {
-  try {
-    const { branchId } = request.params;
-    const { orderId, totalPrice } = request.body;
-
-    if (!orderId || totalPrice === undefined) {
-      return reply.status(400).send({ error: "Missing orderId or totalPrice" });
-    }
-
-    // Calculate platform charge based on order value
-    const charge = calculatePlatformCharge(totalPrice);
-    console.log(
-      `Manual update: calculated charge ${charge} for order ${orderId} with value ${totalPrice}`
-    );
-
-    // Create transaction object
-    const transaction = {
-      orderId,
-      amount: charge,
-      type: "platform_charge",
-      timestamp: new Date(),
-    };
-
-    // Get current wallet state
-    let currentWallet = await Wallet.findOne({ branchId });
-    console.log(
-      `Before update: Wallet ${currentWallet ? "exists" : "does not exist"}`
-    );
-    if (currentWallet) {
-      console.log(
-        `Current balance: ${currentWallet.balance}, transactions: ${currentWallet.transactions.length}`
-      );
-    }
-
-    // Directly update the wallet - avoid findOneAndUpdate to ensure we see exactly what's happening
-    let wallet;
-    if (!currentWallet) {
-      // Create new wallet
-      wallet = new Wallet({
-        branchId,
-        balance: -charge, // Start with negative charge
-        transactions: [transaction],
-      });
-      console.log(`Creating new wallet with initial balance: ${-charge}`);
-    } else {
-      // Update existing wallet
-      currentWallet.balance -= charge;
-      currentWallet.transactions.push(transaction);
-      wallet = currentWallet;
-      console.log(`Updating existing wallet, new balance: ${wallet.balance}`);
-    }
-
-    // Save the changes
-    await wallet.save();
-
-    // Verify the update
-    const verifiedWallet = await Wallet.findOne({ branchId }).lean();
-
-    return reply.status(200).send({
-      success: true,
-      message: "Wallet manually updated",
-      details: {
-        branchId,
-        newBalance: verifiedWallet.balance,
-        charge,
-        transactionCount: verifiedWallet.transactions.length,
-        latestTransaction:
-          verifiedWallet.transactions[verifiedWallet.transactions.length - 1],
-      },
-    });
-  } catch (error) {
-    request.log.error({
-      msg: "Error in manual wallet update",
-      error: error.message,
-    });
-    return reply
-      .status(500)
-      .send({ error: "Failed to update wallet manually" });
-  }
 };

@@ -684,3 +684,77 @@ export const markOrderAsCollected = async (req, reply) => {
     });
   }
 };
+
+export const getBranchSalesLast24Hours = async (req, reply) => {
+  try {
+    const { branchId } = req.params;
+
+    // Check authorization - ensure user is branch owner or admin
+    if (req.user.role === "Branch" && req.user.userId !== branchId) {
+      return reply.code(403).send({
+        status: "ERROR",
+        message:
+          "Unauthorized: You can only access sales data for your own branch",
+        code: "UNAUTHORIZED_ACCESS",
+      });
+    }
+
+    // Calculate 24 hours ago from now
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+    // Query completed orders in the last 24 hours
+    const completedOrders = await Order.find({
+      branch: branchId,
+      status: { $in: ["delivered"] },
+      updatedAt: { $gte: twentyFourHoursAgo },
+    });
+
+    // Calculate total sales
+    const totalSales = completedOrders.reduce(
+      (sum, order) => sum + order.totalPrice,
+      0
+    );
+
+    // Count total orders
+    const orderCount = completedOrders.length;
+
+    // Get item-wise sales breakdown
+    const itemSales = {};
+    completedOrders.forEach((order) => {
+      order.items.forEach((item) => {
+        const itemId = item.item.toString();
+        if (!itemSales[itemId]) {
+          itemSales[itemId] = {
+            quantity: 0,
+            revenue: 0,
+          };
+        }
+        itemSales[itemId].quantity += item.count;
+        itemSales[itemId].revenue += item.price * item.count;
+      });
+    });
+
+    return reply.code(200).send({
+      status: "SUCCESS",
+      data: {
+        branchId,
+        timeRange: {
+          from: twentyFourHoursAgo,
+          to: new Date(),
+        },
+        orderCount,
+        totalSales,
+        itemSales,
+        currency: "INR", // Default currency, can be made dynamic if needed
+      },
+    });
+  } catch (error) {
+    console.error("[24HourSales] Error:", error);
+    return reply.code(500).send({
+      status: "ERROR",
+      message: "Failed to fetch sales data",
+      code: "SALES_FETCH_FAILED",
+      systemError: error.message,
+    });
+  }
+};
