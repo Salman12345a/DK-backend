@@ -153,7 +153,7 @@ export const registerBranch = async (request, reply) => {
       ownerIdProof: ownerIdProofUrl,
       ownerPhoto: ownerPhotoUrl,
       deliveryPartners: [],
-      storeStatus: "open",
+      storeStatus: "closed",
       status: "pending",
       createdAt: new Date(),
     });

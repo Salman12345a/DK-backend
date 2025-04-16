@@ -14,7 +14,7 @@ const walletSchema = new mongoose.Schema({
       amount: { type: Number, required: true },
       type: {
         type: String,
-        enum: ["platform_charge", "payment"],
+        enum: ["order", "payment"],
         required: true,
       },
       timestamp: { type: Date, default: Date.now },
