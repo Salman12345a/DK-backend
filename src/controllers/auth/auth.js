@@ -113,7 +113,7 @@ export const loginDeliveryPartner = async (req, reply) => {
 };
 
 export const loginBranch = async (req, reply) => {
-  const logger = req.log; // Use Fastify's logger for consistency
+  const logger = req.log;
 
   try {
     const { phone } = req.body;
@@ -128,6 +128,16 @@ export const loginBranch = async (req, reply) => {
     if (!branch) {
       logger.warn({ msg: "Branch not found", phone });
       return reply.status(404).send({ message: "Branch not found" });
+    }
+
+    // Check if phone is verified
+    if (!branch.isPhoneVerified) {
+      logger.warn({ msg: "Phone number not verified", phone });
+      return reply.status(403).send({
+        message:
+          "Phone number not verified. Please verify your phone number first.",
+        requiresVerification: true,
+      });
     }
 
     const { accessToken, refreshToken } = generateTokens({
@@ -159,6 +169,7 @@ export const loginBranch = async (req, reply) => {
     });
   }
 };
+
 export const refreshToken = async (req, reply) => {
   const { refreshToken: token } = req.body;
 
