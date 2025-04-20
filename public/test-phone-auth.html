@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Phone Authentication Test</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 600px;
+        margin: 0 auto;
+        padding: 20px;
+      }
+      .container {
+        border: 1px solid #ccc;
+        padding: 20px;
+        border-radius: 5px;
+      }
+      .form-group {
+        margin-bottom: 15px;
+      }
+      label {
+        display: block;
+        margin-bottom: 5px;
+      }
+      input {
+        width: 100%;
+        padding: 8px;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+      }
+      button {
+        background-color: #4caf50;
+        color: white;
+        padding: 10px 15px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+      button:disabled {
+        background-color: #cccccc;
+        cursor: not-allowed;
+      }
+      .error {
+        color: red;
+        margin-top: 5px;
+      }
+      .success {
+        color: green;
+        margin-top: 5px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h2>Phone Authentication</h2>
+      <div class="form-group">
+        <label for="phone">Phone Number:</label>
+        <input type="tel" id="phone" placeholder="+91XXXXXXXXXX" />
+      </div>
+      <div class="form-group">
+        <button id="sendOtp">Send OTP</button>
+        <div id="sendOtpMessage"></div>
+      </div>
+      <div class="form-group" id="otpSection" style="display: none">
+        <label for="otp">Enter OTP:</label>
+        <input type="text" id="otp" placeholder="Enter 6-digit OTP" />
+        <button id="verifyOtp">Verify OTP</button>
+        <div id="verifyOtpMessage"></div>
+      </div>
+    </div>
+
+    <script type="module">
+      import { phoneAuthService } from "./js/phoneAuth.js";
+
+      const phoneInput = document.getElementById("phone");
+      const sendOtpButton = document.getElementById("sendOtp");
+      const otpSection = document.getElementById("otpSection");
+      const otpInput = document.getElementById("otp");
+      const verifyOtpButton = document.getElementById("verifyOtp");
+      const sendOtpMessage = document.getElementById("sendOtpMessage");
+      const verifyOtpMessage = document.getElementById("verifyOtpMessage");
+
+      // Initialize reCAPTCHA when the page loads
+      phoneAuthService.initRecaptcha("sendOtp").catch((error) => {
+        sendOtpMessage.textContent = `Error initializing reCAPTCHA: ${error.message}`;
+        sendOtpMessage.className = "error";
+      });
+
+      sendOtpButton.addEventListener("click", async () => {
+        try {
+          sendOtpButton.disabled = true;
+          sendOtpMessage.textContent = "Sending OTP...";
+          sendOtpMessage.className = "";
+
+          const result = await phoneAuthService.sendOTP(phoneInput.value);
+
+          sendOtpMessage.textContent = result.message;
+          sendOtpMessage.className = "success";
+          otpSection.style.display = "block";
+        } catch (error) {
+          sendOtpMessage.textContent = error.message;
+          sendOtpMessage.className = "error";
+          sendOtpButton.disabled = false;
+        }
+      });
+
+      verifyOtpButton.addEventListener("click", async () => {
+        try {
+          verifyOtpButton.disabled = true;
+          verifyOtpMessage.textContent = "Verifying OTP...";
+          verifyOtpMessage.className = "";
+
+          const result = await phoneAuthService.verifyOTP(
+            phoneInput.value,
+            otpInput.value
+          );
+
+          verifyOtpMessage.textContent = result.message;
+          verifyOtpMessage.className = "success";
+        } catch (error) {
+          verifyOtpMessage.textContent = error.message;
+          verifyOtpMessage.className = "error";
+          verifyOtpButton.disabled = false;
+        }
+      });
+    </script>
+  </body>
+</html>

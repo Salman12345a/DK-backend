@@ -5,6 +5,13 @@ import { buildAdminRouter } from "./src/config/setup.js";
 import { registerRoutes } from "./src/routes/index.js";
 import { PORT } from "./src/config/config.js";
 import fastifySocketIO from "fastify-socket.io";
+import fastifyCors from "@fastify/cors";
+import fastifyStatic from "@fastify/static";
+import { fileURLToPath } from "url";
+import { dirname, join } from "path";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 const start = async () => {
   try {
@@ -12,6 +19,23 @@ const start = async () => {
     const app = Fastify({
       logger: true,
       ignoreTrailingSlash: true,
+    });
+
+    // Register CORS
+    await app.register(fastifyCors, {
+      origin: [
+        "http://localhost:8080",
+        "http://127.0.0.1:8080",
+        "http://localhost:3000",
+      ],
+      methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
+      credentials: true,
+    });
+
+    // Register static file serving
+    await app.register(fastifyStatic, {
+      root: join(__dirname, "public"),
+      prefix: "/public/",
     });
 
     app.setErrorHandler((error, request, reply) => {

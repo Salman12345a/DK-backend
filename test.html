@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>OTP Test</title>
+    <script src="https://www.gstatic.com/firebasejs/9.x.x/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.x.x/firebase-auth.js"></script>
+  </head>
+  <body>
+    <div id="recaptcha-container"></div>
+    <input type="tel" id="phone" placeholder="Phone number" />
+    <button onclick="sendOTP()">Send OTP</button>
+    <br /><br />
+    <input type="text" id="otp" placeholder="Enter OTP" />
+    <button onclick="verifyOTP()">Verify OTP</button>
+
+    <script>
+      // Initialize Firebase with your config
+      const firebaseConfig = {
+        apiKey: "YOUR_API_KEY",
+        authDomain: "dokirana-branch.firebaseapp.com",
+        projectId: "dokirana-branch",
+        // ... other config
+      };
+      firebase.initializeApp(firebaseConfig);
+
+      let confirmationResult;
+
+      function sendOTP() {
+        const phoneNumber = document.getElementById("phone").value;
+        const appVerifier = new firebase.auth.RecaptchaVerifier(
+          "recaptcha-container"
+        );
+
+        firebase
+          .auth()
+          .signInWithPhoneNumber(phoneNumber, appVerifier)
+          .then((result) => {
+            confirmationResult = result;
+            console.log("OTP sent");
+          })
+          .catch((error) => {
+            console.error("Error:", error);
+          });
+      }
+
+      function verifyOTP() {
+        const code = document.getElementById("otp").value;
+        confirmationResult
+          .confirm(code)
+          .then((result) => {
+            console.log("Phone verified:", result.user);
+          })
+          .catch((error) => {
+            console.error("Error:", error);
+          });
+      }
+    </script>
+  </body>
+</html>

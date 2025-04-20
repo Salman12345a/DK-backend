@@ -2,134 +2,83 @@ import Branch from "../../models/branch.js";
 import OTPService from "../../services/otpService.js";
 
 export const sendOTP = async (request, reply) => {
-  const logger = request.log;
-
   try {
-    const { phone } = request.body;
+    const { phoneNumber } = request.body;
 
-    if (!phone) {
+    if (!phoneNumber) {
       return reply.code(400).send({
         success: false,
-        message: "Phone number is required",
+        error: "Phone number is required",
       });
     }
 
-    // Check if branch exists
-    const branch = await Branch.findOne({ phone });
-    if (!branch) {
-      return reply.code(404).send({
-        success: false,
-        message: "Branch not found",
-      });
+    const result = await OTPService.generateOTP(phoneNumber);
+
+    if (!result.success) {
+      return reply.code(400).send(result);
     }
 
-    // Check rate limiting
-    if (
-      branch.phoneVerificationAttempts >= 3 &&
-      branch.lastPhoneVerificationAttempt &&
-      Date.now() - branch.lastPhoneVerificationAttempt.getTime() <
-        15 * 60 * 1000
-    ) {
-      return reply.code(429).send({
-        success: false,
-        message: "Too many attempts. Please try again after 15 minutes.",
-      });
-    }
-
-    // Generate and send OTP
-    const otpResult = await OTPService.generateOTP(phone);
-    if (!otpResult.success) {
-      throw new Error(otpResult.error);
-    }
-
-    // Update verification attempt count
-    await Branch.findByIdAndUpdate(branch._id, {
-      $inc: { phoneVerificationAttempts: 1 },
-      lastPhoneVerificationAttempt: new Date(),
-    });
-
-    logger.info({
-      msg: "OTP sent successfully",
-      phone,
-    });
-
-    return reply.send({
-      success: true,
-      message: "OTP sent successfully",
-      token: otpResult.token,
-      verificationCode: otpResult.verificationCode, // Remove in production
-    });
+    return reply.code(200).send(result);
   } catch (error) {
-    logger.error({
-      msg: "Error in sendOTP",
-      error: error.message,
-      stack: error.stack,
-    });
+    console.error("Error in sendOTP controller:", error);
     return reply.code(500).send({
       success: false,
-      message: "Failed to send OTP",
-      error: process.env.NODE_ENV !== "production" ? error.message : undefined,
+      error: "Internal server error",
     });
   }
 };
 
 export const verifyOTP = async (request, reply) => {
-  const logger = request.log;
-
   try {
-    const { phone, otp, token } = request.body;
+    const { phoneNumber, code, token } = request.body;
 
-    if (!phone || !otp || !token) {
+    if (!phoneNumber || !code || !token) {
       return reply.code(400).send({
         success: false,
-        message: "Phone number, OTP, and token are required",
+        error: "Phone number, verification code, and token are required",
       });
     }
 
-    // Check if branch exists
-    const branch = await Branch.findOne({ phone });
-    if (!branch) {
-      return reply.code(404).send({
-        success: false,
-        message: "Branch not found",
-      });
+    // First verify the OTP
+    const verifyResult = await OTPService.verifyOTP(phoneNumber, code);
+    if (!verifyResult.success) {
+      return reply.code(400).send(verifyResult);
     }
 
-    // Verify OTP
-    const verificationResult = await OTPService.verifyOTP(phone, otp, token);
-    if (!verificationResult.success) {
+    // Then verify the Firebase token
+    const tokenResult = await OTPService.verifyPhoneToken(token);
+    if (!tokenResult.success) {
+      return reply.code(401).send(tokenResult);
+    }
+
+    // Check if the phone numbers match
+    const formattedPhone = OTPService.formatPhoneNumber(phoneNumber);
+    if (formattedPhone !== tokenResult.phoneNumber) {
       return reply.code(400).send({
         success: false,
-        message: verificationResult.error,
+        error: "Phone number mismatch",
       });
     }
 
-    // Update branch verification status
-    await Branch.findByIdAndUpdate(branch._id, {
-      isPhoneVerified: true,
-      phoneVerificationAttempts: 0,
-      lastPhoneVerificationAttempt: null,
-    });
+    // Update branch phone verification status
+    const branch = await Branch.findOne({ phone: phoneNumber });
+    if (branch) {
+      branch.isPhoneVerified = true;
+      branch.phoneVerificationAttempts = 0;
+      branch.lastPhoneVerificationAttempt = new Date();
+      await branch.save();
+    }
 
-    logger.info({
-      msg: "Phone number verified successfully",
-      phone,
-    });
-
-    return reply.send({
+    return reply.code(200).send({
       success: true,
       message: "Phone number verified successfully",
+      phoneNumber: tokenResult.phoneNumber,
     });
   } catch (error) {
-    logger.error({
-      msg: "Error in verifyOTP",
-      error: error.message,
-      stack: error.stack,
-    });
+    console.error("Error in verifyOTP controller:", error);
     return reply.code(500).send({
       success: false,
-      message: "Failed to verify OTP",
-      error: process.env.NODE_ENV !== "production" ? error.message : undefined,
+      error: "Internal server error",
     });
   }
 };
