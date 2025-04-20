@@ -8,6 +8,7 @@ import {
 import { sendOTP, verifyOTP } from "../controllers/auth/otpController.js";
 import { updateUser } from "../controllers/tracking/user.js";
 import { verifyToken } from "../middleware/auth.js";
+import { sendOTP, verifyOTP } from "../controllers/auth/otp.js";
 
 export const authRoutes = async (fastify, options) => {
   // Branch OTP verification routes
@@ -21,4 +22,6 @@ export const authRoutes = async (fastify, options) => {
   fastify.post("/refresh-token", refreshToken);
   fastify.get("/user", { preHandler: [verifyToken] }, fetchUser);
   fastify.patch("/update", { preHandler: [verifyToken] }, updateUser);
+  fastify.post("/branch/send-otp", sendOTP);
+  fastify.post("/branch/verify-otp", verifyOTP);
 };

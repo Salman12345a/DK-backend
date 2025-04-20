@@ -1,6 +1,13 @@
 import Branch from "../../models/branch.js";
 import jwt from "jsonwebtoken";
 import { uploadToS3Branch } from "../../utils/s3UploadBranch.js";
+import { trackOTPVerification } from "../../middleware/otpVerification.js";
+import mongoose from "mongoose";
+
+const OTPVerification = mongoose.model("OTPVerification");
+
+// Temporary storage for branch registration data
+const pendingRegistrations = new Map();
 
 export const getNearbyBranches = async (request, reply) => {
   try {
@@ -450,6 +457,248 @@ export const modifyBranch = async (request, reply) => {
     });
     return reply.status(500).send({
       error: "Failed to modify branch details",
+      details: error.message,
+    });
+  }
+};
+
+export const initiateBranchRegistration = async (request, reply) => {
+  const logger = request.log;
+  try {
+    const { files, body } = request;
+    const {
+      branchName,
+      branchLocation,
+      branchAddress,
+      branchEmail,
+      openingTime,
+      closingTime,
+      ownerName,
+      govId,
+      homeDelivery,
+      selfPickup,
+      phone,
+    } = body;
+
+    // Validate required fields
+    if (
+      !branchName ||
+      !branchLocation ||
+      !branchAddress ||
+      !openingTime ||
+      !closingTime ||
+      !ownerName ||
+      !govId ||
+      !phone ||
+      !files.branchfrontImage ||
+      !files.ownerIdProof ||
+      !files.ownerPhoto
+    ) {
+      logger.warn({
+        msg: "Missing required fields",
+        body,
+        files: Object.keys(files),
+      });
+      return reply.status(400).send({ error: "Missing required fields" });
+    }
+
+    let parsedLocation, parsedAddress;
+    try {
+      parsedLocation = JSON.parse(branchLocation);
+      parsedAddress = JSON.parse(branchAddress);
+    } catch (error) {
+      logger.warn({
+        msg: "Invalid JSON format for branchLocation or branchAddress",
+        error: error.message,
+      });
+      return reply
+        .status(400)
+        .send({ error: "Invalid branchLocation or branchAddress format" });
+    }
+
+    // Store files in S3
+    const timestamp = Date.now();
+    const branchfrontImageUrl = await uploadToS3Branch(
+      files.branchfrontImage.buffer,
+      `branches/${branchName}/front-image-${timestamp}.${
+        files.branchfrontImage.mimetype.split("/")[1]
+      }`,
+      logger,
+      files.branchfrontImage.mimetype
+    );
+    const ownerIdProofUrl = await uploadToS3Branch(
+      files.ownerIdProof.buffer,
+      `branches/${branchName}/id-proof-${timestamp}.${
+        files.ownerIdProof.mimetype.split("/")[1]
+      }`,
+      logger,
+      files.ownerIdProof.mimetype
+    );
+    const ownerPhotoUrl = await uploadToS3Branch(
+      files.ownerPhoto.buffer,
+      `branches/${branchName}/owner-photo-${timestamp}.${
+        files.ownerPhoto.mimetype.split("/")[1]
+      }`,
+      logger,
+      files.ownerPhoto.mimetype
+    );
+
+    // Store registration data temporarily
+    const registrationData = {
+      phone,
+      name: branchName,
+      location: {
+        type: "Point",
+        coordinates: [parsedLocation.longitude, parsedLocation.latitude],
+      },
+      address: {
+        street: parsedAddress.street,
+        area: parsedAddress.area,
+        city: parsedAddress.city,
+        pincode: parsedAddress.pincode,
+      },
+      branchEmail,
+      openingTime,
+      closingTime,
+      ownerName,
+      govId,
+      deliveryServiceAvailable: homeDelivery === "true",
+      selfPickup: selfPickup === "true",
+      branchfrontImage: branchfrontImageUrl,
+      ownerIdProof: ownerIdProofUrl,
+      ownerPhoto: ownerPhotoUrl,
+      timestamp: Date.now(), // For cleanup of old pending registrations
+    };
+
+    // Store in temporary storage with 30 minutes expiry
+    pendingRegistrations.set(phone, registrationData);
+    setTimeout(() => {
+      pendingRegistrations.delete(phone);
+    }, 30 * 60 * 1000); // 30 minutes expiry
+
+    logger.info({
+      msg: "Branch registration initiated",
+      phone,
+    });
+
+    return reply.status(200).send({
+      status: "success",
+      message:
+        "Branch registration initiated. Please verify your phone number.",
+      data: {
+        phone,
+        nextStep: "verify_phone",
+      },
+    });
+  } catch (error) {
+    logger.error({
+      msg: "Error initiating branch registration",
+      error: error.message,
+      stack: error.stack,
+    });
+    return reply.status(500).send({
+      error: "Failed to initiate registration",
+      details: error.message,
+    });
+  }
+};
+
+export const completeBranchRegistration = async (request, reply) => {
+  const logger = request.log;
+  const io = request.server.io;
+
+  try {
+    const { phone } = request.body;
+
+    // Debug logs
+    console.log("Completing registration for phone:", phone);
+    console.log(
+      "Current pending registrations:",
+      Array.from(pendingRegistrations.keys())
+    );
+    console.log("Registration data exists:", pendingRegistrations.has(phone));
+
+    // Check if phone is verified
+    const verification = await OTPVerification.findOne({
+      phoneNumber: phone,
+      isVerified: true,
+      expiresAt: { $gt: new Date() },
+    });
+
+    console.log("OTP Verification status:", verification);
+
+    if (!verification) {
+      return reply.status(403).send({
+        status: "error",
+        message:
+          "Phone number not verified. Please complete verification first.",
+      });
+    }
+
+    // Get pending registration data
+    const registrationData = pendingRegistrations.get(phone);
+    console.log("Found registration data:", !!registrationData);
+
+    if (!registrationData) {
+      return reply.status(404).send({
+        status: "error",
+        message:
+          "Registration data not found or expired. Please register again.",
+        debug: {
+          pendingPhones: Array.from(pendingRegistrations.keys()),
+          requestedPhone: phone,
+          hasData: pendingRegistrations.has(phone),
+        },
+      });
+    }
+
+    // Create and save the branch
+    const newBranch = new Branch({
+      ...registrationData,
+      deliveryPartners: [],
+      storeStatus: "closed",
+      status: "pending",
+      createdAt: new Date(),
+    });
+
+    const savedBranch = await newBranch.save();
+
+    // Generate access token
+    const accessToken = jwt.sign(
+      { branchId: savedBranch._id, phone: savedBranch.phone, role: "Branch" },
+      process.env.ACCESS_TOKEN_SECRET,
+      { expiresIn: "1h" }
+    );
+
+    // Clean up pending registration
+    pendingRegistrations.delete(phone);
+
+    // Emit event
+    const branchData = {
+      branchId: savedBranch._id,
+      phone: savedBranch.phone,
+      status: savedBranch.status,
+    };
+    io.to(`syncmart_${phone}`).emit("branchRegistered", branchData);
+
+    logger.info({
+      msg: "Branch registration completed successfully",
+      branchId: savedBranch._id,
+    });
+
+    return reply.status(201).send({
+      message: "Branch registered successfully",
+      branch: savedBranch,
+      accessToken,
+    });
+  } catch (error) {
+    logger.error({
+      msg: "Error completing branch registration",
+      error: error.message,
+      stack: error.stack,
+    });
+    return reply.status(500).send({
+      error: "Failed to complete registration",
       details: error.message,
     });
   }

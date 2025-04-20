@@ -1,12 +1,15 @@
 import {
   getNearbyBranches,
-  registerBranch,
+  initiateBranchRegistration,
+  completeBranchRegistration,
   updateBranchStatus,
   getBranchStatus,
   modifyBranch,
 } from "../controllers/branch/branch.js";
 import { uploadBranchFiles } from "../middleware/uploadBranchFiles.js";
 import { verifyToken, checkBranchRole } from "../middleware/auth.js";
+import { sendOTP, verifyOTP } from "../controllers/auth/otp.js";
+import { rateLimitOTP } from "../middleware/otpVerification.js";
 
 const checkAdminRole = async (req, reply) => {
   if (req.user.role !== "Admin") {
@@ -25,19 +28,41 @@ export const branchRoutes = async (fastify) => {
     done();
   });
 
+  // Step 1: Initiate branch registration
+  fastify.post(
+    "/register/branch/initiate",
+    { preHandler: [uploadBranchFiles] },
+    async (request, reply) => {
+      console.log("Handling POST /register/branch/initiate");
+      return initiateBranchRegistration(request, reply);
+    }
+  );
+
+  // Step 2: Send OTP
+  fastify.post(
+    "/register/branch/send-otp",
+    { preHandler: [rateLimitOTP] },
+    async (request, reply) => {
+      return sendOTP(request, reply);
+    }
+  );
+
+  // Step 3: Verify OTP
+  fastify.post("/register/branch/verify-otp", async (request, reply) => {
+    return verifyOTP(request, reply);
+  });
+
+  // Step 4: Complete Registration
+  fastify.post("/register/branch/complete", async (request, reply) => {
+    console.log("Handling POST /register/branch/complete");
+    return completeBranchRegistration(request, reply);
+  });
+
+  // Other existing routes
   fastify.get("/branch/nearby", async (request, reply) => {
     console.log("Handling GET /nearby");
     return getNearbyBranches(request, reply);
   });
-
-  fastify.post(
-    "/register/branch",
-    { preHandler: [uploadBranchFiles] },
-    async (request, reply) => {
-      console.log("Handling POST /register/branch");
-      return registerBranch(request, reply);
-    }
-  );
 
   fastify.patch(
     "/admin/branch/:branchId/status",
@@ -112,12 +137,10 @@ export const branchRoutes = async (fastify) => {
             phone: { type: "string" },
             homeDelivery: { type: "boolean" },
             selfPickup: { type: "boolean" },
-            branchfrontImage: { type: "string" }, // URI string
-            ownerIdProof: { type: "string" }, // URI string
-            ownerPhoto: { type: "string" }, // URI string
+            branchfrontImage: { type: "string" },
+            ownerIdProof: { type: "string" },
+            ownerPhoto: { type: "string" },
           },
-          // Optional: Make all fields optional since modifyBranch updates only provided fields
-          // required: [], // Uncomment if all fields should be optional
         },
       },
     },

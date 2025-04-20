@@ -2,6 +2,9 @@ import "dotenv/config";
 import fastifySession from "@fastify/session";
 import ConnectMongoDBSession from "connect-mongodb-session";
 import { Admin } from "../models/index.js";
+import dotenv from "dotenv";
+
+dotenv.config();
 
 const MongoDBStore = ConnectMongoDBSession(fastifySession);
 export const sessionStore = new MongoDBStore({
@@ -44,3 +47,12 @@ export const authenticate = async (email, password) => {
 export const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
 export const COOKIE_PASSWORD = process.env.COOKIE_PASSWORD;
+
+export const config = {
+  // Twilio Configuration
+  TWILIO_ACCOUNT_SID: process.env.TWILIO_ACCOUNT_SID,
+  TWILIO_AUTH_TOKEN: process.env.TWILIO_AUTH_TOKEN,
+  TWILIO_VERIFY_SERVICE_SID: process.env.TWILIO_VERIFY_SERVICE_SID,
+
+  // Other configurations can be added here
+};
