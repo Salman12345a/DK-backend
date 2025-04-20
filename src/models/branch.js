@@ -24,9 +24,6 @@ const statusHistorySchema = new mongoose.Schema({
 const branchSchema = new mongoose.Schema(
   {
     phone: { type: String, required: true, unique: true },
-    isPhoneVerified: { type: Boolean, default: false },
-    phoneVerificationAttempts: { type: Number, default: 0 },
-    lastPhoneVerificationAttempt: { type: Date },
     name: { type: String, required: true },
     location: {
       type: { type: String, enum: ["Point"], default: "Point" },

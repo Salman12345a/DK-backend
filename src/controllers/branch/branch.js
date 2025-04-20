@@ -84,15 +84,6 @@ export const registerBranch = async (request, reply) => {
       return reply.status(400).send({ error: "Missing required fields" });
     }
 
-    // Check if phone number is already registered
-    const existingBranch = await Branch.findOne({ phone });
-    if (existingBranch) {
-      return reply.status(400).send({
-        error: "Phone number already registered",
-        requiresVerification: !existingBranch.isPhoneVerified,
-      });
-    }
-
     let parsedLocation, parsedAddress;
     try {
       parsedLocation = JSON.parse(branchLocation);
@@ -171,7 +162,6 @@ export const registerBranch = async (request, reply) => {
       deliveryPartners: [],
       storeStatus: "closed",
       status: "pending",
-      isPhoneVerified: false,
       createdAt: new Date(),
     });
 
@@ -188,7 +178,6 @@ export const registerBranch = async (request, reply) => {
       branchId: savedBranch._id,
       phone: savedBranch.phone,
       status: savedBranch.status,
-      requiresVerification: true,
     };
     io.to(`syncmart_${phone}`).emit("branchRegistered", branchData);
     console.log(
@@ -207,11 +196,9 @@ export const registerBranch = async (request, reply) => {
     });
 
     return reply.status(201).send({
-      message:
-        "Branch registered successfully. Please verify your phone number.",
+      message: "Branch registered successfully",
       branch: savedBranch,
       accessToken,
-      requiresVerification: true,
     });
   } catch (error) {
     logger.error({
