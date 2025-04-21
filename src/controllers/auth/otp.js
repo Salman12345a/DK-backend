@@ -5,15 +5,34 @@ import { trackOTPVerification } from "../../middleware/otpVerification.js";
 const client = twilio(config.TWILIO_ACCOUNT_SID, config.TWILIO_AUTH_TOKEN);
 
 const validatePhoneNumber = (phoneNumber) => {
-  const phoneRegex = /^\+[1-9]\d{1,14}$/;
-  return phoneRegex.test(phoneNumber);
+  // Ensure the phone number starts with +
+  if (!phoneNumber.startsWith("+")) {
+    console.warn(`Phone number doesn't start with +: ${phoneNumber}`);
+    return false;
+  }
+
+  // Basic validation for international format
+  const phoneRegex = /^\+[1-9]\d{6,14}$/;
+  const isValid = phoneRegex.test(phoneNumber);
+
+  if (!isValid) {
+    console.warn(`Phone number failed regex validation: ${phoneNumber}`);
+  }
+
+  return isValid;
 };
 
 export const sendOTP = async (request, reply) => {
   try {
+    console.log(
+      "SendOTP request received:",
+      JSON.stringify(request.body, null, 2)
+    );
+
     const { phoneNumber } = request.body;
 
     if (!phoneNumber) {
+      console.error("Phone number missing in sendOTP request");
       return reply.code(400).send({
         status: "error",
         message: "Phone number is required",
@@ -21,12 +40,15 @@ export const sendOTP = async (request, reply) => {
     }
 
     if (!validatePhoneNumber(phoneNumber)) {
+      console.error(`Invalid phone format: ${phoneNumber}`);
       return reply.code(400).send({
         status: "error",
         message:
           "Invalid phone number format. Please use international format (e.g., +91XXXXXXXXXX)",
       });
     }
+
+    console.log(`Sending OTP to: ${phoneNumber}`);
 
     // Send verification token
     const verification = await client.verify.v2
@@ -36,6 +58,8 @@ export const sendOTP = async (request, reply) => {
         channel: "sms",
         locale: "en",
       });
+
+    console.log(`OTP sent successfully, status: ${verification.status}`);
 
     // Reset verification status when sending new OTP
     await trackOTPVerification(phoneNumber, false);

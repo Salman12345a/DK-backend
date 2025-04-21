@@ -19,6 +19,40 @@ const start = async () => {
     const app = Fastify({
       logger: true,
       ignoreTrailingSlash: true,
+      bodyLimit: 10485760, // 10MB
+      ajv: {
+        customOptions: {
+          removeAdditional: false,
+          useDefaults: true,
+          coerceTypes: true,
+          allErrors: true,
+        },
+      },
+    });
+
+    // Add hook to log all incoming requests with their bodies for debugging
+    app.addHook("preHandler", (request, reply, done) => {
+      console.log("Incoming request to:", request.url);
+      console.log("Request method:", request.method);
+      console.log("Content-Type:", request.headers["content-type"]);
+      console.log("Raw body type:", typeof request.body);
+
+      // If we have a string body for application/json, try to parse it
+      if (
+        request.headers["content-type"] &&
+        request.headers["content-type"].includes("application/json") &&
+        typeof request.body === "string"
+      ) {
+        try {
+          const parsedBody = JSON.parse(request.body);
+          request.body = parsedBody;
+          console.log("Successfully parsed JSON body:", parsedBody);
+        } catch (e) {
+          console.error("Failed to parse JSON body:", e.message);
+        }
+      }
+
+      done();
     });
 
     // Register CORS

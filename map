@@ -6,6 +6,7 @@ StoreSync-Backend/
 │   │   └── setup.js               # Unchanged
 │   ├── controllers/
 │   │   ├── auth/
+│   │   │   ├── otp.js            # Unchanged
 │   │   │   └── auth.js            # Unchanged
 │   │   ├── order/
 │   │   │   └── order.js           # Unchanged
@@ -19,11 +20,14 @@ StoreSync-Backend/
 │   │   ├── customer/
 │   │   │   └── customer.js    
 │   │   ├── wallet/
-│   │   │   └── wallet.js     # Updated with getLastCustomerBranch
+│   │   │   └── wallet.js  
+│   │   ├── syncmarts/
+│   │   │   └── syncmarts.js   # Updated with getLastCustomerBranch
 │   │   └── branch/                # New directory
 │   │       └── branch.js          # New controller for branch (e.g., nearby)
 │   ├── middleware/
-│   │   ├── auth.js                # Unchanged
+│   │   ├── auth.js       
+│   │   ├── otpVerification.js             # Unchanged
 │   │   |── upload.js
 │   │   └── uploadBranchFiles.js          # Unchanged
 |   |                  
@@ -32,12 +36,14 @@ StoreSync-Backend/
 │   │   ├── category.js            # Unchanged
 │   │   ├── counter.js             # Unchanged
 │   │   ├── index.js               # Unchanged
-│   │   ├── order.js               # Unchanged
+│   │   ├── order.js       
+│   │   ├── otp.js          # Unchanged
 │   │   ├── products.js    
 |   |   ├── wallet.js       # Unchanged
 │   │   └── user.js                # Unchanged
 │   ├── routes/
-│   │   ├── auth.js                # Unchanged
+│   │   ├── auth.js 
+|   |   ├── branchOperations.js               # Unchanged
 │   │   ├── index.js               # Updated
 │   │   ├── order.js               # Unchanged
 │   │   ├── product.js             # Unchanged
@@ -45,10 +51,14 @@ StoreSync-Backend/
 │   │   ├── syncmarts.js           # Unchanged
 │   │   ├── customer.js 
 |   |   ├── wallet.js            # Updated with GET /last-branch
-│   │   └── branch.js              # New route file (e.g., for nearby)
+│   │   └── branch.js    
+│   ├── schedulers/
+│   │   └── branchAutoClose.js  
+|   |           # New route file (e.g., for nearby)
 │   └── utils/
+│       |── branchOperations.js
 │       |── s3Upload.js
-│       |-- walletUtils.js  # New utility for uploading branch files
+│       |── walletUtils.js  # New utility for uploading branch files
 │       └── s3uploadBranch.js  # New utility for uploading branch files
 |                     # Unchanged
 └── app.js                         # Updated
