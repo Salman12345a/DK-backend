@@ -50,9 +50,21 @@ export const sendOTP = async (request, reply) => {
 
     console.log(`Sending OTP to: ${phoneNumber}`);
 
+    // Create a new client instance to ensure we get fresh env vars
+    const localClient = twilio(
+      process.env.TWILIO_ACCOUNT_SID,
+      process.env.TWILIO_AUTH_TOKEN
+    );
+
+    console.log("SendOTP credentials:", {
+      sid: process.env.TWILIO_ACCOUNT_SID ? "Set" : "Not set",
+      token: process.env.TWILIO_AUTH_TOKEN ? "Set" : "Not set",
+      service: process.env.TWILIO_VERIFY_SERVICE_SID || "Not set",
+    });
+
     // Send verification token
-    const verification = await client.verify.v2
-      .services(config.TWILIO_VERIFY_SERVICE_SID)
+    const verification = await localClient.verify.v2
+      .services(process.env.TWILIO_VERIFY_SERVICE_SID)
       .verifications.create({
         to: phoneNumber,
         channel: "sms",
@@ -118,9 +130,21 @@ export const verifyOTP = async (request, reply) => {
       });
     }
 
+    // Create a new client instance to ensure we get fresh env vars
+    const localClient = twilio(
+      process.env.TWILIO_ACCOUNT_SID,
+      process.env.TWILIO_AUTH_TOKEN
+    );
+
+    console.log("VerifyOTP credentials:", {
+      sid: process.env.TWILIO_ACCOUNT_SID ? "Set" : "Not set",
+      token: process.env.TWILIO_AUTH_TOKEN ? "Set" : "Not set",
+      service: process.env.TWILIO_VERIFY_SERVICE_SID || "Not set",
+    });
+
     // Verify the token
-    const verificationCheck = await client.verify.v2
-      .services(config.TWILIO_VERIFY_SERVICE_SID)
+    const verificationCheck = await localClient.verify.v2
+      .services(process.env.TWILIO_VERIFY_SERVICE_SID)
       .verificationChecks.create({
         to: phoneNumber,
         code: otp,

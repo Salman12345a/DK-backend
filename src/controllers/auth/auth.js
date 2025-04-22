@@ -299,10 +299,23 @@ export const completeBranchLogin = async (req, reply) => {
       });
     }
 
+    // Create a new client instance right here to ensure we get fresh env vars
+    const localClient = twilio(
+      process.env.TWILIO_ACCOUNT_SID,
+      process.env.TWILIO_AUTH_TOKEN
+    );
+
+    logger.info({
+      msg: "Attempting OTP verification with credentials",
+      sid: process.env.TWILIO_ACCOUNT_SID ? "Set" : "Not set",
+      token: process.env.TWILIO_AUTH_TOKEN ? "Set" : "Not set",
+      service: process.env.TWILIO_VERIFY_SERVICE_SID || "Not set",
+    });
+
     // Verify the OTP
     try {
-      const verificationCheck = await client.verify.v2
-        .services(config.TWILIO_VERIFY_SERVICE_SID)
+      const verificationCheck = await localClient.verify.v2
+        .services(process.env.TWILIO_VERIFY_SERVICE_SID)
         .verificationChecks.create({
           to: phoneNumber,
           code: otp,
