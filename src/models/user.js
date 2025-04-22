@@ -14,12 +14,20 @@ const customerSchema = new mongoose.Schema({
   ...userSchema.obj,
   phone: { type: Number, required: true, unique: true },
   role: { type: String, enum: ["Customer"], default: "Customer" },
+  name: { type: String },
+  age: { type: Number },
+  gender: { type: String, enum: ["male", "female", "other"] },
   liveLocation: {
     latitude: { type: Number },
     longitude: { type: Number },
   },
-  address: { type: String },
-  selectedBranch: { type: mongoose.Schema.Types.ObjectId, ref: "Branch" }, // Added field
+  address: {
+    street: { type: String },
+    landmark: { type: String },
+    city: { type: String },
+    pincode: { type: String },
+  },
+  selectedBranch: { type: mongoose.Schema.Types.ObjectId, ref: "Branch" },
 });
 
 const deliveryPartnerSchema = new mongoose.Schema({

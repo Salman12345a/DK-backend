@@ -39,19 +39,41 @@ export const loginCustomer = async (req, reply) => {
 
     let customer = await Customer.findOne({ phone });
 
+    // If customer doesn't exist, respond with a message to register
     if (!customer) {
-      customer = new Customer({
-        phone,
-        role: "Customer",
-        isActivated: true,
+      return reply.status(404).send({
+        message: "Customer not found",
+        registrationRequired: true,
       });
-      await customer.save();
+    }
+
+    // Check if customer has completed their profile
+    if (
+      !customer.name ||
+      !customer.age ||
+      !customer.gender ||
+      !customer.address
+    ) {
+      return reply.status(400).send({
+        message: "Registration not completed",
+        registrationRequired: true,
+        customerId: customer._id,
+      });
+    }
+
+    // Check if customer is activated (OTP verified)
+    if (!customer.isActivated) {
+      return reply.status(403).send({
+        message: "Registration not verified",
+        registrationStatus: "pending_verification",
+        customerId: customer._id,
+      });
     }
 
     const { accessToken, refreshToken } = generateTokens(customer);
 
     return reply.send({
-      message: customer ? "Login Successful" : "Customer created and logged in",
+      message: "Login Successful",
       accessToken,
       refreshToken,
       customer,
