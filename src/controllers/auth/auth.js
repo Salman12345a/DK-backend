@@ -4,7 +4,7 @@ import jwt from "jsonwebtoken";
 import "dotenv/config";
 import twilio from "twilio";
 import { config } from "../../config/config.js";
-import { sendOTP } from "./otp.js";
+import { sendOTP, verifyOTP } from "./otp.js";
 
 const client = twilio(config.TWILIO_ACCOUNT_SID, config.TWILIO_AUTH_TOKEN);
 
@@ -29,7 +29,123 @@ const generateTokens = (user) => {
   return { accessToken, refreshToken };
 };
 
+// Step 1: Initiate customer login with OTP
+export const initiateLogin = async (req, reply) => {
+  try {
+    const { phone } = req.body;
+
+    if (!phone) {
+      return reply.status(400).send({
+        status: "error",
+        message: "Phone number is required",
+      });
+    }
+
+    // Check if customer exists
+    const customer = await Customer.findOne({ phone });
+    if (!customer) {
+      return reply.status(404).send({
+        status: "error",
+        message: "Customer not found. Please register first.",
+      });
+    }
+
+    // Format phone number for Twilio (ensure it starts with +)
+    let formattedPhone = phone;
+    if (!phone.toString().startsWith("+")) {
+      formattedPhone = `+${phone}`;
+    }
+
+    // Send OTP to the customer's phone
+    const result = await sendOTP(
+      { body: { phoneNumber: formattedPhone }, log: req.log },
+      { code: (code) => ({ send: (data) => data }) }
+    );
+
+    return reply.status(200).send({
+      status: "success",
+      message: "OTP sent successfully",
+      data: {
+        phoneNumber: phone,
+        otpSent: true,
+      },
+    });
+  } catch (error) {
+    console.error("Error in initiateLogin:", error);
+    return reply.status(500).send({
+      status: "error",
+      message: "An error occurred while initiating login",
+      error: process.env.NODE_ENV === "development" ? error.message : undefined,
+    });
+  }
+};
+
+// Step 2: Verify OTP and complete customer login
+export const verifyLogin = async (req, reply) => {
+  try {
+    const { phone, otp } = req.body;
+
+    if (!phone || !otp) {
+      return reply.status(400).send({
+        status: "error",
+        message: "Phone number and OTP are required",
+      });
+    }
+
+    // Check if customer exists
+    const customer = await Customer.findOne({ phone });
+    if (!customer) {
+      return reply.status(404).send({
+        status: "error",
+        message: "Customer not found. Please register first.",
+      });
+    }
+
+    // Format phone number for Twilio (ensure it starts with +)
+    let formattedPhone = phone;
+    if (!phone.toString().startsWith("+")) {
+      formattedPhone = `+${phone}`;
+    }
+
+    // Verify OTP with Twilio
+    const verificationResult = await verifyOTP(
+      { body: { phoneNumber: formattedPhone, otp }, log: req.log },
+      { code: (code) => ({ send: (data) => data }) }
+    );
+
+    if (!verificationResult.data || !verificationResult.data.verified) {
+      return reply.status(400).send({
+        status: "error",
+        message: "Invalid OTP",
+      });
+    }
+
+    // Generate authentication tokens
+    const { accessToken, refreshToken } = generateTokens(customer);
+
+    return reply.status(200).send({
+      status: "success",
+      message: "Login successful",
+      data: {
+        customer,
+        accessToken,
+        refreshToken,
+      },
+    });
+  } catch (error) {
+    console.error("Error in verifyLogin:", error);
+    return reply.status(500).send({
+      status: "error",
+      message: "An error occurred while verifying login",
+      error: process.env.NODE_ENV === "development" ? error.message : undefined,
+    });
+  }
+};
+
+// Legacy login method - now marked as deprecated
 export const loginCustomer = async (req, reply) => {
+  console.warn("Deprecated: Using direct login without OTP verification");
+
   try {
     const { phone } = req.body;
 

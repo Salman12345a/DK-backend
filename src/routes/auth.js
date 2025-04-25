@@ -6,6 +6,8 @@ import {
   loginBranch,
   initiateBranchLogin,
   completeBranchLogin,
+  initiateLogin,
+  verifyLogin,
 } from "../controllers/auth/auth.js";
 import { updateUser } from "../controllers/tracking/user.js";
 import { verifyToken } from "../middleware/auth.js";
@@ -40,7 +42,42 @@ export const authRoutes = async (fastify, options) => {
     }
   });
 
+  // Legacy customer login endpoint (without OTP verification)
   fastify.post("/customer/login", loginCustomer);
+
+  // New customer login flow with OTP verification
+  fastify.post(
+    "/customer/login/initiate",
+    {
+      schema: {
+        body: {
+          type: "object",
+          required: ["phone"],
+          properties: {
+            phone: { type: "string" },
+          },
+        },
+      },
+    },
+    initiateLogin
+  );
+
+  fastify.post(
+    "/customer/login/verify",
+    {
+      schema: {
+        body: {
+          type: "object",
+          required: ["phone", "otp"],
+          properties: {
+            phone: { type: "string" },
+            otp: { type: "string" },
+          },
+        },
+      },
+    },
+    verifyLogin
+  );
 
   // Legacy branch login endpoint (without OTP verification)
   fastify.post("/branch/login", loginBranch);
