@@ -1,6 +1,13 @@
 import fastify from "fastify";
 import { authRoutes } from "./auth.js";
-import { categoryRoutes, productRoutes } from "./product.js";
+import {
+  categoryRoutes,
+  productRoutes,
+  branchCategoryRoutes,
+  branchProductRoutes,
+  defaultCategoryRoutes,
+  defaultProductRoutes,
+} from "./product.js";
 import { orderRoutes } from "./order.js";
 import { syncmarts } from "./syncmarts.js";
 import { deliveryPartnerRoutes } from "./deliveryPartner.js";
@@ -12,6 +19,15 @@ const prefix = "/api";
 
 export const registerRoutes = async (fastifyInstance) => {
   try {
+    // Create uploads directory if it doesn't exist
+    const fs = await import("fs");
+    const path = await import("path");
+    const uploadsDir = "./uploads";
+    if (!fs.existsSync(uploadsDir)) {
+      fs.mkdirSync(uploadsDir);
+    }
+
+    // Original routes
     fastifyInstance.register(authRoutes, { prefix: `${prefix}/auth` });
     fastifyInstance.register(categoryRoutes, { prefix: `${prefix}` });
     fastifyInstance.register(productRoutes, { prefix: `${prefix}` });
@@ -22,7 +38,24 @@ export const registerRoutes = async (fastifyInstance) => {
     });
     fastifyInstance.register(branchRoutes, { prefix: `${prefix}` });
     fastifyInstance.register(customerRoutes, { prefix: `${prefix}/customer` });
-    fastifyInstance.register(walletRoutes, { prefix: `${prefix}` }); // New registration
+    fastifyInstance.register(walletRoutes, { prefix: `${prefix}` });
+
+    // New branch-specific routes
+    fastifyInstance.register(branchCategoryRoutes, { prefix: `${prefix}` });
+    fastifyInstance.register(branchProductRoutes, { prefix: `${prefix}` });
+
+    // New admin routes for default templates
+    fastifyInstance.register(defaultCategoryRoutes, { prefix: `${prefix}` });
+    fastifyInstance.register(defaultProductRoutes, { prefix: `${prefix}` });
+
+    // Add a root health check endpoint for AWS Beanstalk
+    fastifyInstance.get("/", async (request, reply) => {
+      return {
+        status: "ok",
+        message: "DoKirana Backend is running",
+        timestamp: new Date().toISOString(),
+      };
+    });
 
     // Log all registered routes for debugging
     fastifyInstance.log.info("Registered routes:", fastifyInstance.routes);

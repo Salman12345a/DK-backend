@@ -6,16 +6,39 @@ const categorySchema = new mongoose.Schema(
     name: {
       type: String,
       required: true,
-      unique: true, // Ensure category name is unique
       trim: true, // Remove leading/trailing whitespace
     },
     image: {
       type: String,
       required: true,
     },
+    branchId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Branch",
+    },
+    imageUrl: {
+      type: String, // S3 URL for the category image
+      required: true,
+    },
+    createdFromTemplate: {
+      type: Boolean,
+      default: false,
+    },
+    createdBy: {
+      type: String,
+      enum: ["system", "branch_admin"],
+      default: "branch_admin",
+    },
+    isActive: {
+      type: Boolean,
+      default: true,
+    },
   },
   { timestamps: true }
-); // Optionally, add timestamps for createdAt and updatedAt
+);
+
+// Ensure the combination of name and branchId is unique
+categorySchema.index({ name: 1, branchId: 1 }, { unique: true });
 
 // Create the Category model using the schema
 const Category = mongoose.model("Category", categorySchema);

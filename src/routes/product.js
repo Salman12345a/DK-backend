@@ -1,10 +1,308 @@
-import { getAllCategories } from "../controllers/product/category.js";
-import { getProductByCategoryId } from "../controllers/product/product.js";
+import {
+  getAllCategories,
+  getBranchCategories,
+  createBranchCategory,
+  importDefaultCategories,
+  updateBranchCategory,
+  deleteBranchCategory,
+} from "../controllers/product/category.js";
 
+import {
+  getProductByCategoryId,
+  getBranchProducts,
+  getBranchProductsByCategory,
+  createBranchProduct,
+  importDefaultProducts,
+  updateBranchProduct,
+  deleteBranchProduct,
+  disableProductsFromOrder,
+} from "../controllers/product/product.js";
+
+import {
+  getAllDefaultCategories,
+  createDefaultCategory,
+  updateDefaultCategory,
+  deleteDefaultCategory,
+} from "../controllers/product/defaultCategory.js";
+
+import {
+  getAllDefaultProducts,
+  getDefaultProductsByCategory,
+  createDefaultProduct,
+  updateDefaultProduct,
+  deleteDefaultProduct,
+} from "../controllers/product/defaultProduct.js";
+
+import {
+  uploadCategoryImage,
+  uploadProductImage,
+} from "../controllers/product/upload.js";
+
+// Import for file handling
+import { writeFile } from "fs/promises";
+import { join } from "path";
+import { randomUUID } from "crypto";
+
+// Multer configuration - keep as fallback if needed
+import multer from "fastify-multer";
+import path from "path";
+
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, "./uploads/");
+  },
+  filename: function (req, file, cb) {
+    cb(null, Date.now() + path.extname(file.originalname));
+  },
+});
+
+const upload = multer({
+  storage: storage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB max
+});
+
+// Helper function to handle file uploads with built-in multipart
+const handleFileUpload = async (request) => {
+  const data = await request.file();
+  const filename = `${Date.now()}_${randomUUID()}${path.extname(
+    data.filename
+  )}`;
+  const filepath = join("./uploads", filename);
+  await writeFile(filepath, await data.toBuffer());
+
+  return {
+    path: filepath,
+    filename: filename,
+    mimetype: data.mimetype,
+    originalname: data.filename,
+  };
+};
+
+// Original category routes (for backward compatibility)
 export const categoryRoutes = async (fastify, options) => {
   fastify.get("/categories", getAllCategories);
 };
 
+// Original product routes (for backward compatibility)
 export const productRoutes = async (fastify, options) => {
   fastify.get("/products/:categoryId", getProductByCategoryId);
+};
+
+// Branch-specific category routes
+export const branchCategoryRoutes = async (fastify, options) => {
+  // Get all categories for a branch
+  fastify.get("/branch/:branchId/categories", getBranchCategories);
+
+  // Create a new category for a branch
+  fastify.post("/branch/:branchId/categories", async (request, reply) => {
+    try {
+      if (request.isMultipart()) {
+        const file = await handleFileUpload(request);
+        request.file = file;
+      }
+      return createBranchCategory(request, reply);
+    } catch (error) {
+      reply
+        .status(500)
+        .send({ message: "Error processing upload", error: error.message });
+    }
+  });
+
+  // Import default categories to a branch
+  fastify.post(
+    "/branch/:branchId/categories/import-default",
+    importDefaultCategories
+  );
+
+  // Update a branch category
+  fastify.put("/branch/categories/:id", async (request, reply) => {
+    try {
+      if (request.isMultipart()) {
+        const file = await handleFileUpload(request);
+        request.file = file;
+      }
+      return updateBranchCategory(request, reply);
+    } catch (error) {
+      reply
+        .status(500)
+        .send({ message: "Error processing upload", error: error.message });
+    }
+  });
+
+  // Delete a branch category
+  fastify.delete("/branch/categories/:id", deleteBranchCategory);
+
+  // Upload category image
+  fastify.post(
+    "/branch/:branchId/categories/:categoryId/image",
+    async (request, reply) => {
+      try {
+        if (request.isMultipart()) {
+          const file = await handleFileUpload(request);
+          request.file = file;
+        }
+        return uploadCategoryImage(request, reply);
+      } catch (error) {
+        reply
+          .status(500)
+          .send({ message: "Error processing upload", error: error.message });
+      }
+    }
+  );
+};
+
+// Branch-specific product routes
+export const branchProductRoutes = async (fastify, options) => {
+  // Get all products for a branch
+  fastify.get("/branch/:branchId/products", getBranchProducts);
+
+  // Get products for a branch by category
+  fastify.get(
+    "/branch/:branchId/categories/:categoryId/products",
+    getBranchProductsByCategory
+  );
+
+  // Create a new product for a branch
+  fastify.post("/branch/:branchId/products", async (request, reply) => {
+    try {
+      if (request.isMultipart()) {
+        const file = await handleFileUpload(request);
+        request.file = file;
+      }
+      return createBranchProduct(request, reply);
+    } catch (error) {
+      reply
+        .status(500)
+        .send({ message: "Error processing upload", error: error.message });
+    }
+  });
+
+  // Import default products to a branch
+  fastify.post(
+    "/branch/:branchId/categories/:categoryId/import-products",
+    importDefaultProducts
+  );
+
+  // Update a branch product
+  fastify.put("/branch/products/:id", async (request, reply) => {
+    try {
+      if (request.isMultipart()) {
+        const file = await handleFileUpload(request);
+        request.file = file;
+      }
+      return updateBranchProduct(request, reply);
+    } catch (error) {
+      reply
+        .status(500)
+        .send({ message: "Error processing upload", error: error.message });
+    }
+  });
+
+  // Delete a branch product
+  fastify.delete("/branch/products/:id", deleteBranchProduct);
+
+  // Upload product image
+  fastify.post(
+    "/branch/:branchId/products/:productId/image",
+    async (request, reply) => {
+      try {
+        if (request.isMultipart()) {
+          const file = await handleFileUpload(request);
+          request.file = file;
+        }
+        return uploadProductImage(request, reply);
+      } catch (error) {
+        reply
+          .status(500)
+          .send({ message: "Error processing upload", error: error.message });
+      }
+    }
+  );
+
+  // Disable products from order
+  fastify.put("/branch/:branchId/products/disable", disableProductsFromOrder);
+};
+
+// Admin default category routes
+export const defaultCategoryRoutes = async (fastify, options) => {
+  // Get all default categories
+  fastify.get("/admin/default-categories", getAllDefaultCategories);
+
+  // Create a new default category
+  fastify.post("/admin/default-categories", async (request, reply) => {
+    try {
+      if (request.isMultipart()) {
+        const file = await handleFileUpload(request);
+        request.file = file;
+      }
+      return createDefaultCategory(request, reply);
+    } catch (error) {
+      reply
+        .status(500)
+        .send({ message: "Error processing upload", error: error.message });
+    }
+  });
+
+  // Update a default category
+  fastify.put("/admin/default-categories/:id", async (request, reply) => {
+    try {
+      if (request.isMultipart()) {
+        const file = await handleFileUpload(request);
+        request.file = file;
+      }
+      return updateDefaultCategory(request, reply);
+    } catch (error) {
+      reply
+        .status(500)
+        .send({ message: "Error processing upload", error: error.message });
+    }
+  });
+
+  // Delete a default category
+  fastify.delete("/admin/default-categories/:id", deleteDefaultCategory);
+};
+
+// Admin default product routes
+export const defaultProductRoutes = async (fastify, options) => {
+  // Get all default products
+  fastify.get("/admin/default-products", getAllDefaultProducts);
+
+  // Get default products by category
+  fastify.get(
+    "/admin/default-categories/:categoryId/products",
+    getDefaultProductsByCategory
+  );
+
+  // Create a new default product
+  fastify.post("/admin/default-products", async (request, reply) => {
+    try {
+      if (request.isMultipart()) {
+        const file = await handleFileUpload(request);
+        request.file = file;
+      }
+      return createDefaultProduct(request, reply);
+    } catch (error) {
+      reply
+        .status(500)
+        .send({ message: "Error processing upload", error: error.message });
+    }
+  });
+
+  // Update a default product
+  fastify.put("/admin/default-products/:id", async (request, reply) => {
+    try {
+      if (request.isMultipart()) {
+        const file = await handleFileUpload(request);
+        request.file = file;
+      }
+      return updateDefaultProduct(request, reply);
+    } catch (error) {
+      reply
+        .status(500)
+        .send({ message: "Error processing upload", error: error.message });
+    }
+  });
+
+  // Delete a default product
+  fastify.delete("/admin/default-products/:id", deleteDefaultProduct);
 };

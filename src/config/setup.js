@@ -4,9 +4,16 @@ import * as Models from "../models/index.js";
 import AdminJSFastify from "@adminjs/fastify";
 import { authenticate, COOKIE_PASSWORD, sessionStore } from "./config.js";
 import { dark, light, noSidebar } from "@adminjs/themes";
+import componentLoader from "./components.js";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 AdminJS.registerAdapter(AdminJSMongoose);
 
+// Configure AdminJS
 export const admin = new AdminJS({
   resources: [
     {
@@ -127,8 +134,261 @@ export const admin = new AdminJS({
     { resource: Models.Branch },
     { resource: Models.Product },
     { resource: Models.Category },
-    { resource: Models.Order },
+    {
+      resource: Models.Order,
+      options: {
+        actions: {
+          getOrderDetails: {
+            actionType: "resource",
+            handler: async (request, response, context) => {
+              const { orderId } = request.params;
+              const order = await context.resource.findOne(orderId);
+
+              if (!order) {
+                return {
+                  notice: {
+                    message: "Order not found",
+                    type: "error",
+                  },
+                };
+              }
+
+              return {
+                data: order.toJSON(),
+              };
+            },
+          },
+        },
+      },
+    },
     { resource: Models.Counter },
+
+    // New default template resources for DoKirana inventory system
+    {
+      resource: Models.DefaultCategory,
+      options: {
+        navigation: {
+          name: "Inventory Templates",
+          icon: "Category",
+        },
+        listProperties: ["name", "isActive", "createdAt"],
+        filterProperties: ["name", "isActive", "createdAt"],
+        editProperties: ["name", "description", "isActive", "imageUrl"],
+        showProperties: [
+          "name",
+          "description",
+          "imageUrl",
+          "isActive",
+          "createdAt",
+          "updatedAt",
+        ],
+        properties: {
+          _id: {
+            isVisible: { list: true, filter: true, show: true, edit: false },
+          },
+          name: {
+            isTitle: true,
+            isRequired: true,
+            validation: {
+              required: true,
+            },
+            custom: {
+              minLength: 2,
+            },
+            props: {
+              placeholder: "Enter name",
+            },
+          },
+          imageUrl: {
+            isVisible: { list: true, filter: false, show: true, edit: true },
+            type: "string",
+            isTitle: false,
+            description:
+              "Enter the full URL to the image (e.g., https://your-bucket.s3.amazonaws.com/image.jpg)",
+            props: {
+              placeholder: "https://your-bucket.s3.amazonaws.com/image.jpg",
+            },
+            custom: {
+              renderImage: true,
+            },
+          },
+          description: {
+            type: "textarea",
+            isRequired: false,
+          },
+          isActive: {
+            isVisible: { list: true, filter: true, show: true, edit: true },
+            type: "boolean",
+          },
+          createdAt: {
+            isVisible: { list: true, filter: true, show: true, edit: false },
+          },
+          updatedAt: {
+            isVisible: { list: false, filter: false, show: true, edit: false },
+          },
+        },
+        actions: {
+          new: {
+            before: async (request) => {
+              if (request.payload.name) {
+                request.payload = {
+                  ...request.payload,
+                  name: request.payload.name.trim(),
+                };
+              }
+              return request;
+            },
+          },
+          edit: {
+            before: async (request) => {
+              if (request.payload.name) {
+                request.payload = {
+                  ...request.payload,
+                  name: request.payload.name.trim(),
+                };
+              }
+              return request;
+            },
+          },
+        },
+      },
+    },
+    {
+      resource: Models.DefaultProduct,
+      options: {
+        navigation: {
+          name: "Inventory Templates",
+          icon: "Product",
+        },
+        listProperties: ["name", "suggestedPrice", "unit", "isActive"],
+        filterProperties: ["name", "defaultCategory", "unit", "isActive"],
+        editProperties: [
+          "name",
+          "suggestedPrice",
+          "unit",
+          "defaultCategory",
+          "isPacket",
+          "description",
+          "isActive",
+          "imageUrl",
+        ],
+        showProperties: [
+          "name",
+          "suggestedPrice",
+          "unit",
+          "defaultCategory",
+          "imageUrl",
+          "isPacket",
+          "description",
+          "isActive",
+          "createdAt",
+          "updatedAt",
+        ],
+        properties: {
+          _id: {
+            isVisible: { list: true, filter: true, show: true, edit: false },
+          },
+          name: {
+            isTitle: true,
+            isRequired: true,
+            validation: {
+              required: true,
+            },
+            custom: {
+              minLength: 2,
+            },
+            props: {
+              placeholder: "Enter name",
+            },
+          },
+          suggestedPrice: {
+            type: "number",
+            isRequired: true,
+            validation: {
+              required: true,
+              min: 0,
+            },
+            props: {
+              placeholder: "Enter price",
+            },
+          },
+          unit: {
+            isRequired: true,
+            validation: {
+              required: true,
+            },
+            availableValues: [
+              { value: "kg", label: "Kilogram (kg)" },
+              { value: "g", label: "Gram (g)" },
+              { value: "liter", label: "Liter (l)" },
+              { value: "ml", label: "Milliliter (ml)" },
+              { value: "pack", label: "Pack" },
+              { value: "piece", label: "Piece" },
+            ],
+          },
+          defaultCategory: {
+            isVisible: { list: true, filter: true, show: true, edit: true },
+            reference: "DefaultCategory",
+            isRequired: true,
+          },
+          imageUrl: {
+            isVisible: { list: true, filter: false, show: true, edit: true },
+            type: "string",
+            isTitle: false,
+            description:
+              "Enter the full URL to the image (e.g., https://your-bucket.s3.amazonaws.com/image.jpg)",
+            props: {
+              placeholder: "https://your-bucket.s3.amazonaws.com/image.jpg",
+            },
+            custom: {
+              renderImage: true,
+            },
+          },
+          isPacket: {
+            isVisible: { list: true, filter: true, show: true, edit: true },
+            type: "boolean",
+          },
+          description: {
+            type: "textarea",
+            isRequired: false,
+          },
+          isActive: {
+            isVisible: { list: true, filter: true, show: true, edit: true },
+            type: "boolean",
+          },
+          createdAt: {
+            isVisible: { list: true, filter: true, show: true, edit: false },
+          },
+          updatedAt: {
+            isVisible: { list: false, filter: false, show: true, edit: false },
+          },
+        },
+        actions: {
+          new: {
+            before: async (request) => {
+              if (request.payload.name) {
+                request.payload = {
+                  ...request.payload,
+                  name: request.payload.name.trim(),
+                };
+              }
+              return request;
+            },
+          },
+          edit: {
+            before: async (request) => {
+              if (request.payload.name) {
+                request.payload = {
+                  ...request.payload,
+                  name: request.payload.name.trim(),
+                };
+              }
+              return request;
+            },
+          },
+        },
+      },
+    },
   ],
   branding: {
     companyName: "DoKirana",
@@ -137,6 +397,7 @@ export const admin = new AdminJS({
       "https://storesync-bucket.s3.eu-north-1.amazonaws.com/uploads/Do+Kirana.png",
     logo: "https://storesync-bucket.s3.eu-north-1.amazonaws.com/uploads/Do+Kirana.png",
   },
+  componentLoader,
   defaultTheme: dark.id,
   rootPath: "/admin",
   availableThemes: [dark, light, noSidebar],
