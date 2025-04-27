@@ -133,7 +133,86 @@ export const admin = new AdminJS({
     },
     { resource: Models.Branch },
     { resource: Models.Product },
-    { resource: Models.Category },
+    {
+      resource: Models.Category,
+      options: {
+        listProperties: ["name", "isActive", "createdAt"],
+        filterProperties: ["name", "isActive", "createdAt"],
+        editProperties: ["name", "isActive", "imageUrl"],
+        showProperties: [
+          "name",
+          "imageUrl",
+          "isActive",
+          "createdAt",
+          "updatedAt",
+        ],
+        properties: {
+          _id: {
+            isVisible: { list: true, filter: true, show: true, edit: false },
+          },
+          name: {
+            isTitle: true,
+            isRequired: true,
+            validation: {
+              required: true,
+            },
+            custom: {
+              minLength: 2,
+            },
+            props: {
+              placeholder: "Enter name",
+            },
+          },
+          imageUrl: {
+            isVisible: { list: true, filter: false, show: true, edit: true },
+            type: "string",
+            isTitle: false,
+            description:
+              "Enter the full URL to the image (e.g., https://your-bucket.s3.amazonaws.com/image.jpg)",
+            props: {
+              placeholder: "https://your-bucket.s3.amazonaws.com/image.jpg",
+            },
+            custom: {
+              renderImage: true,
+            },
+          },
+          isActive: {
+            isVisible: { list: true, filter: true, show: true, edit: true },
+            type: "boolean",
+          },
+          createdAt: {
+            isVisible: { list: true, filter: true, show: true, edit: false },
+          },
+          updatedAt: {
+            isVisible: { list: false, filter: false, show: true, edit: false },
+          },
+        },
+        actions: {
+          new: {
+            before: async (request) => {
+              if (request.payload.name) {
+                request.payload = {
+                  ...request.payload,
+                  name: request.payload.name.trim(),
+                };
+              }
+              return request;
+            },
+          },
+          edit: {
+            before: async (request) => {
+              if (request.payload.name) {
+                request.payload = {
+                  ...request.payload,
+                  name: request.payload.name.trim(),
+                };
+              }
+              return request;
+            },
+          },
+        },
+      },
+    },
     {
       resource: Models.Order,
       options: {
@@ -173,10 +252,9 @@ export const admin = new AdminJS({
         },
         listProperties: ["name", "isActive", "createdAt"],
         filterProperties: ["name", "isActive", "createdAt"],
-        editProperties: ["name", "description", "isActive", "imageUrl"],
+        editProperties: ["name", "isActive", "imageUrl"],
         showProperties: [
           "name",
-          "description",
           "imageUrl",
           "isActive",
           "createdAt",
@@ -211,10 +289,6 @@ export const admin = new AdminJS({
             custom: {
               renderImage: true,
             },
-          },
-          description: {
-            type: "textarea",
-            isRequired: false,
           },
           isActive: {
             isVisible: { list: true, filter: true, show: true, edit: true },
