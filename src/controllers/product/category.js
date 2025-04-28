@@ -71,11 +71,12 @@ export const createBranchCategory = async (req, reply) => {
       });
     }
 
-    // Create new category without image first to get ID
+    // Create new category WITHOUT image first to get ID
+    // The client should use the returned ID to upload an image using the pre-signed URL flow
     const newCategory = new Category({
       name,
       branchId,
-      image: "", // For backwards compatibility
+      image: "", // Will be updated after S3 upload
       imageUrl: "", // Will be updated after S3 upload
       createdBy: createdBy || "branch_admin",
       createdFromTemplate: false,
@@ -83,16 +84,7 @@ export const createBranchCategory = async (req, reply) => {
 
     await newCategory.save();
 
-    // Upload image to S3 if provided
-    if (req.file) {
-      const key = generateCategoryKey(newCategory._id, true, branchId);
-      const imageUrl = await uploadToS3(req.file, key);
-
-      // Update category with image URL
-      newCategory.imageUrl = imageUrl;
-      newCategory.image = imageUrl; // For backwards compatibility
-      await newCategory.save();
-    }
+    // Do NOT handle image upload here. The client should use the pre-signed URL endpoints after creation.
 
     return reply.status(201).send(newCategory);
   } catch (error) {

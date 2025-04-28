@@ -36,6 +36,10 @@ import {
 import {
   uploadCategoryImage,
   uploadProductImage,
+  getCategoryImageUploadUrl,
+  updateCategoryImageUrl,
+  getProductImageUploadUrl,
+  updateProductImageUrl,
 } from "../controllers/product/upload.js";
 
 // Import for file handling
@@ -132,7 +136,19 @@ export const branchCategoryRoutes = async (fastify, options) => {
   // Delete a branch category
   fastify.delete("/branch/categories/:id", deleteBranchCategory);
 
-  // Upload category image
+  // Get pre-signed URL for category image upload
+  fastify.get(
+    "/branch/:branchId/categories/:categoryId/image-upload-url",
+    getCategoryImageUploadUrl
+  );
+
+  // Update category image URL after successful upload
+  fastify.post(
+    "/branch/categories/:categoryId/image-url",
+    updateCategoryImageUrl
+  );
+
+  // Keep the old upload endpoint for backward compatibility
   fastify.post(
     "/branch/:branchId/categories/:categoryId/image",
     async (request, reply) => {
@@ -201,7 +217,19 @@ export const branchProductRoutes = async (fastify, options) => {
   // Delete a branch product
   fastify.delete("/branch/products/:id", deleteBranchProduct);
 
-  // Upload product image
+  // Get pre-signed URL for product image upload
+  fastify.get(
+    "/branch/:branchId/products/:productId/image-upload-url",
+    getProductImageUploadUrl
+  );
+
+  // Update product image URL after successful upload
+  fastify.post(
+    "/branch/products/:productId/image-url",
+    updateProductImageUrl
+  );
+
+  // Keep the old upload endpoint for backward compatibility
   fastify.post(
     "/branch/:branchId/products/:productId/image",
     async (request, reply) => {

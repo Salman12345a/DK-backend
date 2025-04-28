@@ -10,7 +10,8 @@ const categorySchema = new mongoose.Schema(
     },
     image: {
       type: String,
-      required: true,
+      required: false,
+      default: "",
     },
     branchId: {
       type: mongoose.Schema.Types.ObjectId,
@@ -18,7 +19,8 @@ const categorySchema = new mongoose.Schema(
     },
     imageUrl: {
       type: String, // S3 URL for the category image
-      required: true,
+      required: false,
+      default: "",
     },
     createdFromTemplate: {
       type: Boolean,

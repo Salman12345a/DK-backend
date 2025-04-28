@@ -165,7 +165,8 @@ export const createBranchProduct = async (req, reply) => {
         });
     }
 
-    // Create new product without image first to get ID
+    // Create new product WITHOUT image first to get ID
+    // The client should use the returned ID to upload an image using the pre-signed URL flow
     const newProduct = new Product({
       name,
       price,
@@ -176,23 +177,14 @@ export const createBranchProduct = async (req, reply) => {
       branchId,
       isPacket: isPacket || false,
       description: description || "",
-      image: "", // For backwards compatibility
+      image: "", // Will be updated after S3 upload
       imageUrl: "", // Will be updated after S3 upload
       createdFromTemplate: false,
     });
 
     await newProduct.save();
 
-    // Upload image to S3 if provided
-    if (req.file) {
-      const key = generateProductKey(newProduct._id, true, branchId);
-      const imageUrl = await uploadToS3(req.file, key);
-
-      // Update product with image URL
-      newProduct.imageUrl = imageUrl;
-      newProduct.image = imageUrl; // For backwards compatibility
-      await newProduct.save();
-    }
+    // Do NOT handle image upload here. The client should use the pre-signed URL endpoints after creation.
 
     return reply.status(201).send(newProduct);
   } catch (error) {

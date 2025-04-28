@@ -1,4 +1,5 @@
-import AWS from "aws-sdk";
+import { S3Client, PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -8,23 +9,20 @@ import { promisify } from "util";
 const readFile = promisify(fs.readFile);
 const unlinkFile = promisify(fs.unlink);
 
-// Configure AWS SDK
-const configureS3 = () => {
-  AWS.config.update({
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-    region: process.env.AWS_REGION || "us-east-1",
-  });
-
-  return new AWS.S3();
-};
+// Configure AWS SDK v3 S3 client for categories/products
+const s3Client = new S3Client({
+  region: process.env.AWS_REGIONS || "us-east-1",
+  credentials: {
+    accessKeyId: process.env.AWS_ACCESS_KEY,
+    secretAccessKey: process.env.AWS_SECRET_KEY,
+  },
+});
 
 // Upload a file to S3
 export const uploadToS3 = async (file, key) => {
   try {
     console.log("File received for upload:", JSON.stringify(file, null, 2));
 
-    const s3 = configureS3();
     let fileContent;
     let mimeType = "application/octet-stream";
 
@@ -90,11 +88,11 @@ export const uploadToS3 = async (file, key) => {
     }
 
     console.log(
-      `Uploading to S3: bucket=${process.env.S3_BUCKET_NAME}, key=${key}, contentType=${mimeType}`
+      `Uploading to S3: bucket=${process.env.S3_BUCKET}, key=${key}, contentType=${mimeType}`
     );
 
     const params = {
-      Bucket: process.env.S3_BUCKET_NAME || "dokirana-images",
+      Bucket: process.env.S3_BUCKET,
       Key: key,
       Body: fileContent,
       ContentType: mimeType,
@@ -102,9 +100,13 @@ export const uploadToS3 = async (file, key) => {
     };
 
     console.log("Starting S3 upload...");
-    const data = await s3.upload(params).promise();
-    console.log("S3 upload complete, location:", data.Location);
-    return data.Location;
+    const command = new PutObjectCommand(params);
+    await s3Client.send(command);
+    const region = process.env.AWS_REGIONS || "us-east-1";
+    const bucketName = process.env.S3_BUCKET;
+    const location = `https://${bucketName}.s3.${region}.amazonaws.com/${key}`;
+    console.log("S3 upload complete, location:", location);
+    return location;
   } catch (error) {
     console.error("Error uploading to S3:", error);
     throw error;
@@ -114,13 +116,12 @@ export const uploadToS3 = async (file, key) => {
 // Delete a file from S3
 export const deleteFromS3 = async (key) => {
   try {
-    const s3 = configureS3();
     const params = {
-      Bucket: process.env.S3_BUCKET_NAME || "dokirana-images",
+      Bucket: process.env.S3_BUCKET,
       Key: key,
     };
-
-    await s3.deleteObject(params).promise();
+    const command = new DeleteObjectCommand(params);
+    await s3Client.send(command);
     return true;
   } catch (error) {
     console.error("Error deleting from S3:", error);
@@ -154,7 +155,25 @@ export const generateProductKey = (
 
 // Get S3 URL from key
 export const getS3Url = (key) => {
-  const bucketName = process.env.S3_BUCKET_NAME || "dokirana-images";
-  const region = process.env.AWS_REGION || "us-east-1";
+  const bucketName = process.env.S3_BUCKET;
+  const region = process.env.AWS_REGIONS || "us-east-1";
   return `https://${bucketName}.s3.${region}.amazonaws.com/${key}`;
+};
+
+// Generate pre-signed URL for S3 upload (AWS SDK v3)
+export const generatePresignedUrl = async (key, contentType) => {
+  const params = {
+    Bucket: process.env.S3_BUCKET,
+    Key: key,
+    ContentType: contentType,
+    ACL: "public-read",
+  };
+  const command = new PutObjectCommand(params);
+  try {
+    const url = await getSignedUrl(s3Client, command, { expiresIn: 300 }); // 5 minutes
+    return url;
+  } catch (error) {
+    console.error("Error generating pre-signed URL:", error);
+    throw error;
+  }
 };

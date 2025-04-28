@@ -87,6 +87,11 @@ export const createDefaultProduct = async (req, reply) => {
         .send({ message: "A default product with this name already exists" });
     }
 
+    // Require image for default product
+    if (!req.file) {
+      return reply.status(400).send({ message: "Image is required for default product" });
+    }
+
     // Create new product without image first to get ID
     const newProduct = new DefaultProduct({
       name,
@@ -110,6 +115,11 @@ export const createDefaultProduct = async (req, reply) => {
       await newProduct.save();
     }
 
+    // Ensure imageUrl is set
+    if (!newProduct.imageUrl) {
+      return reply.status(400).send({ message: "Image upload failed for default product" });
+    }
+
     return reply.status(201).send(newProduct);
   } catch (error) {
     return reply
@@ -125,15 +135,7 @@ export const createDefaultProduct = async (req, reply) => {
 export const updateDefaultProduct = async (req, reply) => {
   try {
     const { id } = req.params;
-    const {
-      name,
-      suggestedPrice,
-      unit,
-      defaultCategory,
-      isPacket,
-      description,
-      isActive,
-    } = req.body;
+    const { name, suggestedPrice, unit, isPacket, description, isActive } = req.body;
 
     // Validate ID
     if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -146,22 +148,6 @@ export const updateDefaultProduct = async (req, reply) => {
       return reply.status(404).send({ message: "Default product not found" });
     }
 
-    // If category is provided, validate it
-    if (defaultCategory) {
-      if (!mongoose.Types.ObjectId.isValid(defaultCategory)) {
-        return reply.status(400).send({ message: "Invalid category ID" });
-      }
-
-      const categoryExists = await DefaultCategory.findById(defaultCategory);
-      if (!categoryExists) {
-        return reply
-          .status(404)
-          .send({ message: "Default category not found" });
-      }
-
-      product.defaultCategory = defaultCategory;
-    }
-
     // Update fields
     if (name) product.name = name;
     if (suggestedPrice !== undefined) product.suggestedPrice = suggestedPrice;
@@ -169,6 +155,11 @@ export const updateDefaultProduct = async (req, reply) => {
     if (isPacket !== undefined) product.isPacket = isPacket;
     if (description !== undefined) product.description = description;
     if (isActive !== undefined) product.isActive = isActive;
+
+    // Require image if not already set and not being updated
+    if (!product.imageUrl && !req.file) {
+      return reply.status(400).send({ message: "Image is required for default product" });
+    }
 
     // Upload new image if provided
     if (req.file) {

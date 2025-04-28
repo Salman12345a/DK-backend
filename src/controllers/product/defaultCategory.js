@@ -32,6 +32,11 @@ export const createDefaultCategory = async (req, reply) => {
         .send({ message: "A default category with this name already exists" });
     }
 
+    // Require image for default category
+    if (!req.file) {
+      return reply.status(400).send({ message: "Image is required for default category" });
+    }
+
     // Create new category without image first to get ID
     const newCategory = new DefaultCategory({
       name,
@@ -49,6 +54,11 @@ export const createDefaultCategory = async (req, reply) => {
       // Update category with image URL
       newCategory.imageUrl = imageUrl;
       await newCategory.save();
+    }
+
+    // Ensure imageUrl is set
+    if (!newCategory.imageUrl) {
+      return reply.status(400).send({ message: "Image upload failed for default category" });
     }
 
     return reply.status(201).send(newCategory);
@@ -81,6 +91,11 @@ export const updateDefaultCategory = async (req, reply) => {
     if (name) category.name = name;
     if (description !== undefined) category.description = description;
     if (isActive !== undefined) category.isActive = isActive;
+
+    // Require image if not already set and not being updated
+    if (!category.imageUrl && !req.file) {
+      return reply.status(400).send({ message: "Image is required for default category" });
+    }
 
     // Upload new image if provided
     if (req.file) {
