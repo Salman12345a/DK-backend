@@ -35,6 +35,11 @@ const categorySchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    defaultCategoryId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "DefaultCategory",
+      required: false,
+    },
   },
   { timestamps: true }
 );

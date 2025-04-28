@@ -198,7 +198,7 @@ export const createBranchProduct = async (req, reply) => {
 export const importDefaultProducts = async (req, reply) => {
   try {
     const { branchId, categoryId } = req.params;
-    const { defaultCategoryId } = req.body;
+    const { defaultCategoryId, productIds } = req.body || {};
 
     // Validate IDs
     if (
@@ -232,16 +232,45 @@ export const importDefaultProducts = async (req, reply) => {
       return reply.status(404).send({ message: "Default category not found" });
     }
 
-    // Get all active default products for this default category
-    const defaultProducts = await DefaultProduct.find({
-      defaultCategory: defaultCategoryId,
-      isActive: true,
-    });
-
-    if (!defaultProducts.length) {
-      return reply
-        .status(404)
-        .send({ message: "No default products found to import" });
+    // Get default products based on provided IDs or all active ones
+    let defaultProducts;
+    let selectionMode = "all";
+    
+    if (productIds && Array.isArray(productIds) && productIds.length > 0) {
+      // Validate that all provided IDs are valid ObjectIds
+      const validIds = productIds.filter(id => mongoose.Types.ObjectId.isValid(id));
+      
+      if (validIds.length === 0) {
+        return reply.status(400).send({ 
+          message: "Invalid product IDs provided. Please provide valid product IDs." 
+        });
+      }
+      
+      // Get only the selected active default products that belong to the specified default category
+      defaultProducts = await DefaultProduct.find({ 
+        _id: { $in: validIds },
+        defaultCategory: defaultCategoryId,
+        isActive: true 
+      });
+      selectionMode = "selected";
+      
+      if (defaultProducts.length === 0) {
+        return reply.status(404).send({ 
+          message: "None of the selected default products were found, active, or belong to the specified category" 
+        });
+      }
+    } else {
+      // Backward compatibility: Get all active default products for this default category
+      defaultProducts = await DefaultProduct.find({
+        defaultCategory: defaultCategoryId,
+        isActive: true,
+      });
+      
+      if (defaultProducts.length === 0) {
+        return reply
+          .status(404)
+          .send({ message: "No default products found to import" });
+      }
     }
 
     const importResults = [];
@@ -288,9 +317,10 @@ export const importDefaultProducts = async (req, reply) => {
     }
 
     return reply.send({
-      message: "Default products import completed",
-      totalImported: importResults.filter((r) => r.status === "imported")
-        .length,
+      message: selectionMode === "selected" 
+        ? "Selected default products import completed" 
+        : "Default products import completed",
+      totalImported: importResults.filter((r) => r.status === "imported").length,
       totalSkipped: importResults.filter((r) => r.status === "skipped").length,
       results: importResults,
     });

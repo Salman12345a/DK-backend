@@ -153,37 +153,72 @@ export const importDefaultCategories = async (req, reply) => {
 
     // Import each default category to the branch
     for (const defaultCategory of defaultCategories) {
-      // Check if this category already exists for the branch
-      const existingCategory = await Category.findOne({
+      // Check if this category already exists for the branch by name
+      const existingCategoryByName = await Category.findOne({
         name: defaultCategory.name,
         branchId,
       });
 
-      if (existingCategory) {
+      // Check if a category with the same ID exists for this branch
+      const existingCategoryById = await Category.findOne({
+        _id: defaultCategory._id,
+        branchId,
+      });
+
+      // If either a category with the same name or ID exists for this branch, skip it
+      if (existingCategoryByName || existingCategoryById) {
         importResults.push({
           name: defaultCategory.name,
           status: "skipped",
           reason: "Category already exists for this branch",
+          id: existingCategoryById ? existingCategoryById._id : (existingCategoryByName ? existingCategoryByName._id : null)
         });
         continue;
       }
 
-      // Create new branch category from the template
-      const newCategory = new Category({
-        name: defaultCategory.name,
-        branchId,
-        image: defaultCategory.imageUrl, // For backwards compatibility
-        imageUrl: defaultCategory.imageUrl,
-        createdFromTemplate: true,
-        createdBy: "system",
-      });
+      // Check if the ID is already used by any category (even in a different branch)
+      const idConflict = await Category.findById(defaultCategory._id);
+      
+      if (idConflict) {
+        // If there's an ID conflict, we'll create a new category with a new ID
+        const newCategory = new Category({
+          name: defaultCategory.name,
+          branchId,
+          image: defaultCategory.imageUrl, // For backwards compatibility
+          imageUrl: defaultCategory.imageUrl,
+          createdFromTemplate: true,
+          createdBy: "system",
+          defaultCategoryId: defaultCategory._id, // Store the original default category ID for reference
+        });
 
-      await newCategory.save();
-      importResults.push({
-        name: defaultCategory.name,
-        status: "imported",
-        id: newCategory._id,
-      });
+        await newCategory.save();
+        importResults.push({
+          name: defaultCategory.name,
+          status: "imported",
+          id: newCategory._id,
+          originalId: defaultCategory._id,
+          note: "Created with new ID due to conflict"
+        });
+      } else {
+        // No ID conflict, create with the original ID
+        const newCategory = new Category({
+          _id: defaultCategory._id, // Use the original ID
+          name: defaultCategory.name,
+          branchId,
+          image: defaultCategory.imageUrl, // For backwards compatibility
+          imageUrl: defaultCategory.imageUrl,
+          createdFromTemplate: true,
+          createdBy: "system",
+          defaultCategoryId: defaultCategory._id, // Store the original default category ID for reference
+        });
+
+        await newCategory.save();
+        importResults.push({
+          name: defaultCategory.name,
+          status: "imported",
+          id: newCategory._id,
+        });
+      }
     }
 
     return reply.send({
