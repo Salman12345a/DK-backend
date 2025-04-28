@@ -16,6 +16,7 @@ import {
   updateBranchProduct,
   deleteBranchProduct,
   disableProductsFromOrder,
+  modifyImportedDefaultProduct,
 } from "../controllers/product/product.js";
 
 import {
@@ -197,6 +198,31 @@ export const branchProductRoutes = async (fastify, options) => {
   fastify.post(
     "/branch/:branchId/categories/:categoryId/import-products",
     importDefaultProducts
+  );
+
+  // Modify imported default product for a branch
+  fastify.put(
+    "/branch/:branchId/imported-products/:productId/modify",
+    async (request, reply) => {
+      try {
+        // Check content type to determine if it's a multipart request
+        const contentType = request.headers['content-type'] || '';
+        
+        // Only process as multipart if explicitly specified
+        if (contentType.includes('multipart/form-data')) {
+          if (request.isMultipart()) {
+            const file = await handleFileUpload(request);
+            request.file = file;
+          }
+        }
+        
+        return modifyImportedDefaultProduct(request, reply);
+      } catch (error) {
+        reply
+          .status(500)
+          .send({ message: "Error processing request", error: error.message });
+      }
+    }
   );
 
   // Update a branch product

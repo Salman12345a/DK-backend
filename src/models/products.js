@@ -34,6 +34,15 @@ const productSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    modifiedFromDefault: {
+      type: Boolean,
+      default: false,
+    },
+    defaultProductId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "DefaultProduct",
+      required: false,
+    },
     disabledReason: {
       type: String,
     },
