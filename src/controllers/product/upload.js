@@ -222,7 +222,7 @@ export const updateCategoryImageUrl = async (req, reply) => {
       return reply.status(404).send({ message: "Category not found" });
     }
 
-    const imageUrl = `https://${process.env.S3_BRANCH_BUCKET}.s3.${process.env.AWS_REGION}.amazonaws.com/${key}`;
+    const imageUrl = `https://${process.env.S3_BUCKET}.s3.${process.env.AWS_REGIONS}.amazonaws.com/${key}`;
     category.imageUrl = imageUrl;
     category.image = imageUrl; // For backwards compatibility
     await category.save();
@@ -307,7 +307,7 @@ export const updateProductImageUrl = async (req, reply) => {
       return reply.status(404).send({ message: "Product not found" });
     }
 
-    const imageUrl = `https://${process.env.S3_BRANCH_BUCKET}.s3.${process.env.AWS_REGION}.amazonaws.com/${key}`;
+    const imageUrl = `https://${process.env.S3_BUCKET}.s3.${process.env.AWS_REGIONS}.amazonaws.com/${key}`;
     product.imageUrl = imageUrl;
     product.image = imageUrl; // For backwards compatibility
     await product.save();

@@ -3,8 +3,8 @@ import mongoose from "mongoose";
 const productSchema = new mongoose.Schema(
   {
     name: { type: String, required: true },
-    image: { type: String, required: true },
-    imageUrl: { type: String, required: true }, // S3 URL for the product image
+    image: { type: String, required: false },
+    imageUrl: { type: String, required: false }, // S3 URL for the product image
     price: { type: Number, required: true },
     discountPrice: { type: Number },
     quantity: { type: String, required: true }, // e.g., "1 kg", "500 g"
