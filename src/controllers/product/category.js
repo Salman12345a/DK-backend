@@ -99,6 +99,7 @@ export const createBranchCategory = async (req, reply) => {
 export const importDefaultCategories = async (req, reply) => {
   try {
     const { branchId } = req.params;
+    const { categoryIds } = req.body || {};
 
     // Validate branch ID
     if (!mongoose.Types.ObjectId.isValid(branchId)) {
@@ -111,12 +112,41 @@ export const importDefaultCategories = async (req, reply) => {
       return reply.status(404).send({ message: "Branch not found" });
     }
 
-    // Get all active default categories
-    const defaultCategories = await DefaultCategory.find({ isActive: true });
-    if (!defaultCategories.length) {
-      return reply
-        .status(404)
-        .send({ message: "No default categories found to import" });
+    // Get default categories based on provided IDs or all active ones
+    let defaultCategories;
+    let selectionMode = "all";
+    
+    if (categoryIds && Array.isArray(categoryIds) && categoryIds.length > 0) {
+      // Validate that all provided IDs are valid ObjectIds
+      const validIds = categoryIds.filter(id => mongoose.Types.ObjectId.isValid(id));
+      
+      if (validIds.length === 0) {
+        return reply.status(400).send({ 
+          message: "Invalid category IDs provided. Please provide valid category IDs." 
+        });
+      }
+      
+      // Get only the selected active default categories
+      defaultCategories = await DefaultCategory.find({ 
+        _id: { $in: validIds },
+        isActive: true 
+      });
+      selectionMode = "selected";
+      
+      if (defaultCategories.length === 0) {
+        return reply.status(404).send({ 
+          message: "None of the selected default categories were found or active" 
+        });
+      }
+    } else {
+      // Backward compatibility: Get all active default categories
+      defaultCategories = await DefaultCategory.find({ isActive: true });
+      
+      if (defaultCategories.length === 0) {
+        return reply.status(404).send({ 
+          message: "No default categories found to import" 
+        });
+      }
     }
 
     const importResults = [];
@@ -157,9 +187,10 @@ export const importDefaultCategories = async (req, reply) => {
     }
 
     return reply.send({
-      message: "Default categories import completed",
-      totalImported: importResults.filter((r) => r.status === "imported")
-        .length,
+      message: selectionMode === "selected" 
+        ? "Selected default categories import completed" 
+        : "Default categories import completed",
+      totalImported: importResults.filter((r) => r.status === "imported").length,
       totalSkipped: importResults.filter((r) => r.status === "skipped").length,
       results: importResults,
     });
