@@ -298,3 +298,140 @@ export const deleteBranchCategory = async (req, reply) => {
       .send({ message: "Error deleting category", error: error.message });
   }
 };
+
+// Deactivate (soft delete) an imported default category
+export const deactivateImportedCategory = async (req, reply) => {
+  try {
+    const { id, branchId } = req.params;
+    
+    // Validate ID
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return reply.status(400).send({ message: "Invalid category ID" });
+    }
+    
+    // Validate branch ID
+    if (!mongoose.Types.ObjectId.isValid(branchId)) {
+      return reply.status(400).send({ message: "Invalid branch ID" });
+    }
+    
+    // Verify branch exists
+    const branch = await Branch.findById(branchId);
+    if (!branch) {
+      return reply.status(404).send({ message: "Branch not found" });
+    }
+    
+    // Find the category
+    const category = await Category.findById(id);
+    if (!category) {
+      return reply.status(404).send({ message: "Category not found" });
+    }
+    
+    // Verify it belongs to the specified branch
+    if (category.branchId.toString() !== branchId) {
+      return reply.status(403).send({ 
+        message: "This category does not belong to the specified branch" 
+      });
+    }
+    
+    // Verify it's an imported default category
+    if (!category.createdFromTemplate || category.createdBy !== "system") {
+      return reply.status(400).send({ 
+        message: "This operation is only allowed for imported default categories" 
+      });
+    }
+    
+    // Deactivate the category instead of deleting it
+    category.isActive = false;
+    await category.save();
+    
+    return reply.send({ 
+      message: "Imported category deactivated successfully",
+      category: category
+    });
+  } catch (error) {
+    return reply.status(500).send({ 
+      message: "Error deactivating imported category", 
+      error: error.message 
+    });
+  }
+};
+
+// Bulk deactivate multiple imported default categories
+export const deactivateMultipleImportedCategories = async (req, reply) => {
+  try {
+    const { branchId } = req.params;
+    const { categoryIds } = req.body || {};
+    
+    // Validate branch ID
+    if (!mongoose.Types.ObjectId.isValid(branchId)) {
+      return reply.status(400).send({ message: "Invalid branch ID" });
+    }
+    
+    // Verify branch exists
+    const branch = await Branch.findById(branchId);
+    if (!branch) {
+      return reply.status(404).send({ message: "Branch not found" });
+    }
+    
+    // Validate category IDs
+    if (!categoryIds || !Array.isArray(categoryIds) || categoryIds.length === 0) {
+      return reply.status(400).send({ 
+        message: "Please provide an array of category IDs to deactivate" 
+      });
+    }
+    
+    const validIds = categoryIds.filter(id => mongoose.Types.ObjectId.isValid(id));
+    if (validIds.length === 0) {
+      return reply.status(400).send({ 
+        message: "No valid category IDs provided" 
+      });
+    }
+    
+    // Find all categories that match the criteria:
+    // 1. Belong to the specified branch
+    // 2. Are in the provided list of IDs
+    // 3. Are imported default categories (createdFromTemplate: true, createdBy: "system")
+    const categories = await Category.find({
+      _id: { $in: validIds },
+      branchId: branchId,
+      createdFromTemplate: true,
+      createdBy: "system"
+    });
+    
+    if (categories.length === 0) {
+      return reply.status(404).send({ 
+        message: "No matching imported default categories found for this branch" 
+      });
+    }
+    
+    // Deactivate all matching categories
+    const deactivationResults = [];
+    for (const category of categories) {
+      category.isActive = false;
+      await category.save();
+      deactivationResults.push({
+        id: category._id,
+        name: category.name,
+        status: "deactivated"
+      });
+    }
+    
+    // Report on any IDs that were not found or not imported categories
+    const notProcessedIds = validIds.filter(id => 
+      !deactivationResults.some(result => result.id.toString() === id)
+    );
+    
+    return reply.send({
+      message: "Bulk deactivation of imported categories completed",
+      totalDeactivated: deactivationResults.length,
+      totalNotProcessed: notProcessedIds.length,
+      deactivated: deactivationResults,
+      notProcessed: notProcessedIds
+    });
+  } catch (error) {
+    return reply.status(500).send({ 
+      message: "Error deactivating imported categories", 
+      error: error.message 
+    });
+  }
+};
