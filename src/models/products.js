@@ -2,7 +2,11 @@ import mongoose from "mongoose";
 
 const productSchema = new mongoose.Schema(
   {
-    name: { type: String, required: true },
+    name: { 
+      type: String, 
+      required: true,
+      unique: false, // Explicitly set to false to prevent unique constraint on just the name
+    },
     image: { type: String, required: false },
     imageUrl: { type: String, required: false }, // S3 URL for the product image
     price: { type: Number, required: true },
@@ -17,6 +21,7 @@ const productSchema = new mongoose.Schema(
     branchId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Branch",
+      required: true, // Make branchId required to ensure proper indexing
     },
     isAvailable: {
       type: Boolean,
@@ -56,10 +61,15 @@ const productSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// Create compound index for branch and category
+// Drop any existing indexes to ensure clean state
+productSchema.index({ name: 1 }, { unique: false }); // Explicitly override any existing unique index on name
+
+// Create compound index for branch and name - allows same product names across different branches
 productSchema.index({ name: 1, branchId: 1 }, { unique: true });
+
 // Index for quick filtering by availability
 productSchema.index({ branchId: 1, isAvailable: 1 });
+
 // Index for category filtering
 productSchema.index({ Category: 1, branchId: 1 });
 

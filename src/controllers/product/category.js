@@ -135,52 +135,43 @@ export const importDefaultCategories = async (req, reply) => {
       
       if (defaultCategories.length === 0) {
         return reply.status(404).send({ 
-          message: "None of the selected default categories were found or active" 
+          message: "No active default categories found with the provided IDs." 
         });
       }
     } else {
-      // Backward compatibility: Get all active default categories
+      // Get all active default categories
       defaultCategories = await DefaultCategory.find({ isActive: true });
       
       if (defaultCategories.length === 0) {
         return reply.status(404).send({ 
-          message: "No default categories found to import" 
+          message: "No active default categories found in the system." 
         });
       }
     }
 
+    // Process each default category for import
     const importResults = [];
 
-    // Import each default category to the branch
     for (const defaultCategory of defaultCategories) {
-      // Check if this category already exists for the branch by name
-      const existingCategoryByName = await Category.findOne({
-        name: defaultCategory.name,
-        branchId,
-      });
-
-      // Check if a category with the same ID exists for this branch
-      const existingCategoryById = await Category.findOne({
-        _id: defaultCategory._id,
-        branchId,
-      });
-
-      // If either a category with the same name or ID exists for this branch, skip it
-      if (existingCategoryByName || existingCategoryById) {
-        importResults.push({
+      try {
+        // Check if a category with the same name already exists for this branch
+        const existingCategory = await Category.findOne({
           name: defaultCategory.name,
-          status: "skipped",
-          reason: "Category already exists for this branch",
-          id: existingCategoryById ? existingCategoryById._id : (existingCategoryByName ? existingCategoryByName._id : null)
+          branchId
         });
-        continue;
-      }
 
-      // Check if the ID is already used by any category (even in a different branch)
-      const idConflict = await Category.findById(defaultCategory._id);
-      
-      if (idConflict) {
-        // If there's an ID conflict, we'll create a new category with a new ID
+        if (existingCategory) {
+          importResults.push({
+            name: defaultCategory.name,
+            status: "skipped",
+            reason: "Category already exists for this branch",
+            id: defaultCategory._id
+          });
+          continue;
+        }
+
+        // Always create a new category with a new MongoDB-generated ID
+        // This ensures each branch gets its own unique copy
         const newCategory = new Category({
           name: defaultCategory.name,
           branchId,
@@ -191,32 +182,58 @@ export const importDefaultCategories = async (req, reply) => {
           defaultCategoryId: defaultCategory._id, // Store the original default category ID for reference
         });
 
-        await newCategory.save();
+        try {
+          await newCategory.save();
+          importResults.push({
+            name: defaultCategory.name,
+            status: "imported",
+            id: newCategory._id,
+            originalId: defaultCategory._id
+          });
+        } catch (saveError) {
+          // Check if it's a duplicate key error on the name field
+          if (saveError.code === 11000 && saveError.keyPattern && saveError.keyPattern.name) {
+            // Generate a modified name to avoid the conflict
+            const branchSuffix = branchId.toString().substring(0, 4);
+            const modifiedName = `${defaultCategory.name}_${branchSuffix}`;
+            
+            // Try again with the modified name
+            newCategory.name = modifiedName;
+            try {
+              await newCategory.save();
+              importResults.push({
+                name: defaultCategory.name,
+                status: "imported",
+                id: newCategory._id,
+                originalId: defaultCategory._id,
+                modifiedName: modifiedName,
+                note: "Imported with modified name to avoid conflict"
+              });
+            } catch (retryError) {
+              importResults.push({
+                name: defaultCategory.name,
+                status: "error",
+                reason: `Failed to import even with modified name: ${retryError.message}`,
+                id: defaultCategory._id
+              });
+            }
+          } else {
+            // Handle other save errors
+            importResults.push({
+              name: defaultCategory.name,
+              status: "error",
+              reason: saveError.message || "Unknown error during save",
+              id: defaultCategory._id
+            });
+          }
+        }
+      } catch (error) {
+        // Handle errors for individual category imports
         importResults.push({
           name: defaultCategory.name,
-          status: "imported",
-          id: newCategory._id,
-          originalId: defaultCategory._id,
-          note: "Created with new ID due to conflict"
-        });
-      } else {
-        // No ID conflict, create with the original ID
-        const newCategory = new Category({
-          _id: defaultCategory._id, // Use the original ID
-          name: defaultCategory.name,
-          branchId,
-          image: defaultCategory.imageUrl, // For backwards compatibility
-          imageUrl: defaultCategory.imageUrl,
-          createdFromTemplate: true,
-          createdBy: "system",
-          defaultCategoryId: defaultCategory._id, // Store the original default category ID for reference
-        });
-
-        await newCategory.save();
-        importResults.push({
-          name: defaultCategory.name,
-          status: "imported",
-          id: newCategory._id,
+          status: "error",
+          reason: error.message || "Unknown error during import",
+          id: defaultCategory._id
         });
       }
     }
@@ -227,6 +244,7 @@ export const importDefaultCategories = async (req, reply) => {
         : "Default categories import completed",
       totalImported: importResults.filter((r) => r.status === "imported").length,
       totalSkipped: importResults.filter((r) => r.status === "skipped").length,
+      totalErrors: importResults.filter((r) => r.status === "error").length,
       results: importResults,
     });
   } catch (error) {
@@ -340,17 +358,17 @@ export const deactivateImportedCategory = async (req, reply) => {
       });
     }
     
-    // Deactivate the category instead of deleting it
-    category.isActive = false;
-    await category.save();
+    // Delete the category instead of deactivating it
+    await Category.findByIdAndDelete(id);
     
     return reply.send({ 
-      message: "Imported category deactivated successfully",
-      category: category
+      message: "Imported category removed successfully",
+      categoryId: id,
+      categoryName: category.name
     });
   } catch (error) {
     return reply.status(500).send({ 
-      message: "Error deactivating imported category", 
+      message: "Error removing imported category", 
       error: error.message 
     });
   }
@@ -376,7 +394,7 @@ export const deactivateMultipleImportedCategories = async (req, reply) => {
     // Validate category IDs
     if (!categoryIds || !Array.isArray(categoryIds) || categoryIds.length === 0) {
       return reply.status(400).send({ 
-        message: "Please provide an array of category IDs to deactivate" 
+        message: "Please provide an array of category IDs to remove" 
       });
     }
     
@@ -404,33 +422,113 @@ export const deactivateMultipleImportedCategories = async (req, reply) => {
       });
     }
     
-    // Deactivate all matching categories
-    const deactivationResults = [];
+    // Delete all matching categories
+    const deletionResults = [];
     for (const category of categories) {
-      category.isActive = false;
-      await category.save();
-      deactivationResults.push({
+      await Category.findByIdAndDelete(category._id);
+      deletionResults.push({
         id: category._id,
         name: category.name,
-        status: "deactivated"
+        status: "removed"
       });
     }
     
     // Report on any IDs that were not found or not imported categories
     const notProcessedIds = validIds.filter(id => 
-      !deactivationResults.some(result => result.id.toString() === id)
+      !deletionResults.some(result => result.id.toString() === id)
     );
     
     return reply.send({
-      message: "Bulk deactivation of imported categories completed",
-      totalDeactivated: deactivationResults.length,
+      message: "Bulk removal of imported categories completed",
+      totalRemoved: deletionResults.length,
       totalNotProcessed: notProcessedIds.length,
-      deactivated: deactivationResults,
+      removed: deletionResults,
       notProcessed: notProcessedIds
     });
   } catch (error) {
     return reply.status(500).send({ 
-      message: "Error deactivating imported categories", 
+      message: "Error removing imported categories", 
+      error: error.message 
+    });
+  }
+};
+
+// Remove imported default categories (single or multiple)
+export const removeImportedCategories = async (req, reply) => {
+  try {
+    const { branchId } = req.params;
+    const { categoryIds } = req.body || {};
+    
+    // Validate branch ID
+    if (!mongoose.Types.ObjectId.isValid(branchId)) {
+      return reply.status(400).send({ message: "Invalid branch ID" });
+    }
+    
+    // Verify branch exists
+    const branch = await Branch.findById(branchId);
+    if (!branch) {
+      return reply.status(404).send({ message: "Branch not found" });
+    }
+    
+    // Validate category IDs
+    if (!categoryIds || !Array.isArray(categoryIds) || categoryIds.length === 0) {
+      return reply.status(400).send({ 
+        message: "Please provide an array of category IDs to remove" 
+      });
+    }
+    
+    const validIds = categoryIds.filter(id => mongoose.Types.ObjectId.isValid(id));
+    if (validIds.length === 0) {
+      return reply.status(400).send({ 
+        message: "No valid category IDs provided" 
+      });
+    }
+    
+    // Find all categories that match the criteria:
+    // 1. Belong to the specified branch
+    // 2. Are in the provided list of IDs
+    // 3. Are imported default categories (createdFromTemplate: true, createdBy: "system")
+    const categories = await Category.find({
+      _id: { $in: validIds },
+      branchId: branchId,
+      createdFromTemplate: true,
+      createdBy: "system"
+    });
+    
+    if (categories.length === 0) {
+      return reply.status(404).send({ 
+        message: "No matching imported default categories found for this branch" 
+      });
+    }
+    
+    // Delete all matching categories
+    const deletionResults = [];
+    for (const category of categories) {
+      await Category.findByIdAndDelete(category._id);
+      deletionResults.push({
+        id: category._id,
+        name: category.name,
+        status: "removed"
+      });
+    }
+    
+    // Report on any IDs that were not found or not imported categories
+    const notProcessedIds = validIds.filter(id => 
+      !deletionResults.some(result => result.id.toString() === id)
+    );
+    
+    return reply.send({
+      message: categories.length === 1 
+        ? "Category removed successfully" 
+        : "Bulk removal of imported categories completed",
+      totalRemoved: deletionResults.length,
+      totalNotProcessed: notProcessedIds.length,
+      removed: deletionResults,
+      notProcessed: notProcessedIds
+    });
+  } catch (error) {
+    return reply.status(500).send({ 
+      message: "Error removing imported categories", 
       error: error.message 
     });
   }

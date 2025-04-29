@@ -7,6 +7,7 @@ const categorySchema = new mongoose.Schema(
       type: String,
       required: true,
       trim: true, // Remove leading/trailing whitespace
+      unique: false, // Explicitly set to false to prevent unique constraint on just the name
     },
     image: {
       type: String,
@@ -16,6 +17,7 @@ const categorySchema = new mongoose.Schema(
     branchId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Branch",
+      required: true, // Make branchId required to ensure proper indexing
     },
     imageUrl: {
       type: String, // S3 URL for the category image
@@ -44,7 +46,11 @@ const categorySchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// Drop any existing indexes to ensure clean state
+categorySchema.index({ name: 1 }, { unique: false }); // Explicitly override any existing unique index on name
+
 // Ensure the combination of name and branchId is unique
+// This allows same category names across different branches
 categorySchema.index({ name: 1, branchId: 1 }, { unique: true });
 
 // Create the Category model using the schema

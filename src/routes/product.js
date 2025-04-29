@@ -7,6 +7,7 @@ import {
   deleteBranchCategory,
   deactivateImportedCategory,
   deactivateMultipleImportedCategories,
+  removeImportedCategories,
 } from "../controllers/product/category.js";
 
 import {
@@ -19,6 +20,7 @@ import {
   deleteBranchProduct,
   disableProductsFromOrder,
   modifyImportedDefaultProduct,
+  deactivateImportedProducts,
 } from "../controllers/product/product.js";
 
 import {
@@ -139,11 +141,8 @@ export const branchCategoryRoutes = async (fastify, options) => {
   // Delete a branch category
   fastify.delete("/branch/categories/:id", deleteBranchCategory);
 
-  // Deactivate an imported default category (soft delete)
-  fastify.put("/branch/:branchId/categories/:id/deactivate", deactivateImportedCategory);
-  
-  // Bulk deactivate imported default categories
-  fastify.put("/branch/:branchId/categories/deactivate-imported", deactivateMultipleImportedCategories);
+  // Remove imported default categories (single or bulk)
+  fastify.put("/branch/:branchId/categories/remove-imported", removeImportedCategories);
 
   // Get pre-signed URL for category image upload
   fastify.get(
@@ -283,6 +282,9 @@ export const branchProductRoutes = async (fastify, options) => {
 
   // Disable products from order
   fastify.put("/branch/:branchId/products/disable", disableProductsFromOrder);
+
+  // Remove imported default products (single or bulk)
+  fastify.put("/branch/:branchId/products/remove-imported", deactivateImportedProducts);
 };
 
 // Admin default category routes
