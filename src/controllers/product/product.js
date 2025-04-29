@@ -288,17 +288,34 @@ export const importDefaultProducts = async (req, reply) => {
         });
 
         if (existingProduct) {
+          // Update the existing product with the latest default product data
+          existingProduct.price = defaultProduct.price;
+          existingProduct.discountPrice = defaultProduct.discountPrice;
+          existingProduct.quantity = defaultProduct.quantity;
+          existingProduct.unit = defaultProduct.unit;
+          existingProduct.Category = defaultProduct.Category;
+          existingProduct.image = defaultProduct.imageUrl; // For backwards compatibility
+          existingProduct.imageUrl = defaultProduct.imageUrl;
+          existingProduct.isPacket = defaultProduct.isPacket || false;
+          existingProduct.description = defaultProduct.description || "";
+          existingProduct.createdFromTemplate = true;
+          existingProduct.defaultProductId = defaultProduct._id;
+          existingProduct.isAvailable = true;
+          existingProduct.lastUpdatedFromDefault = new Date();
+          existingProduct.modifiedFromDefault = false; // Reset modification flag
+
+          await existingProduct.save();
+          
           importResults.push({
             name: defaultProduct.name,
-            status: "skipped",
-            reason: "Product already exists for this branch",
-            id: defaultProduct._id
+            status: "updated",
+            id: existingProduct._id,
+            originalId: defaultProduct._id
           });
           continue;
         }
 
-        // Always create a new product with a new MongoDB-generated ID
-        // This ensures each branch gets its own unique copy
+        // Create new product if it doesn't exist
         const newProduct = new Product({
           name: defaultProduct.name,
           branchId,
@@ -312,56 +329,19 @@ export const importDefaultProducts = async (req, reply) => {
           isPacket: defaultProduct.isPacket || false,
           description: defaultProduct.description || "",
           createdFromTemplate: true,
-          defaultProductId: defaultProduct._id, // Store the original default product ID for reference
+          createdBy: "system",
+          defaultProductId: defaultProduct._id,
+          lastUpdatedFromDefault: new Date()
         });
 
-        try {
-          await newProduct.save();
-          importResults.push({
-            name: defaultProduct.name,
-            status: "imported",
-            id: newProduct._id,
-            originalId: defaultProduct._id
-          });
-        } catch (saveError) {
-          // Check if it's a duplicate key error on the name field
-          if (saveError.code === 11000 && saveError.keyPattern && saveError.keyPattern.name) {
-            // Generate a modified name to avoid the conflict
-            const branchSuffix = branchId.toString().substring(0, 4);
-            const modifiedName = `${defaultProduct.name}_${branchSuffix}`;
-            
-            // Try again with the modified name
-            newProduct.name = modifiedName;
-            try {
-              await newProduct.save();
-              importResults.push({
-                name: defaultProduct.name,
-                status: "imported",
-                id: newProduct._id,
-                originalId: defaultProduct._id,
-                modifiedName: modifiedName,
-                note: "Imported with modified name to avoid conflict"
-              });
-            } catch (retryError) {
-              importResults.push({
-                name: defaultProduct.name,
-                status: "error",
-                reason: `Failed to import even with modified name: ${retryError.message}`,
-                id: defaultProduct._id
-              });
-            }
-          } else {
-            // Handle other save errors
-            importResults.push({
-              name: defaultProduct.name,
-              status: "error",
-              reason: saveError.message || "Unknown error during save",
-              id: defaultProduct._id
-            });
-          }
-        }
+        await newProduct.save();
+        importResults.push({
+          name: defaultProduct.name,
+          status: "imported",
+          id: newProduct._id,
+          originalId: defaultProduct._id
+        });
       } catch (error) {
-        // Handle errors for individual product imports
         importResults.push({
           name: defaultProduct.name,
           status: "error",
@@ -376,7 +356,7 @@ export const importDefaultProducts = async (req, reply) => {
         ? "Selected default products import completed" 
         : "Default products import completed",
       totalImported: importResults.filter((r) => r.status === "imported").length,
-      totalSkipped: importResults.filter((r) => r.status === "skipped").length,
+      totalUpdated: importResults.filter((r) => r.status === "updated").length,
       totalErrors: importResults.filter((r) => r.status === "error").length,
       results: importResults,
     });

@@ -161,17 +161,25 @@ export const importDefaultCategories = async (req, reply) => {
         });
 
         if (existingCategory) {
+          // Update the existing category with the latest default category data
+          existingCategory.image = defaultCategory.imageUrl; // For backwards compatibility
+          existingCategory.imageUrl = defaultCategory.imageUrl;
+          existingCategory.createdFromTemplate = true;
+          existingCategory.defaultCategoryId = defaultCategory._id;
+          existingCategory.isActive = true;
+
+          await existingCategory.save();
+          
           importResults.push({
             name: defaultCategory.name,
-            status: "skipped",
-            reason: "Category already exists for this branch",
-            id: defaultCategory._id
+            status: "updated",
+            id: existingCategory._id,
+            originalId: defaultCategory._id
           });
           continue;
         }
 
-        // Always create a new category with a new MongoDB-generated ID
-        // This ensures each branch gets its own unique copy
+        // Create new category if it doesn't exist
         const newCategory = new Category({
           name: defaultCategory.name,
           branchId,
@@ -179,56 +187,17 @@ export const importDefaultCategories = async (req, reply) => {
           imageUrl: defaultCategory.imageUrl,
           createdFromTemplate: true,
           createdBy: "system",
-          defaultCategoryId: defaultCategory._id, // Store the original default category ID for reference
+          defaultCategoryId: defaultCategory._id,
         });
 
-        try {
-          await newCategory.save();
-          importResults.push({
-            name: defaultCategory.name,
-            status: "imported",
-            id: newCategory._id,
-            originalId: defaultCategory._id
-          });
-        } catch (saveError) {
-          // Check if it's a duplicate key error on the name field
-          if (saveError.code === 11000 && saveError.keyPattern && saveError.keyPattern.name) {
-            // Generate a modified name to avoid the conflict
-            const branchSuffix = branchId.toString().substring(0, 4);
-            const modifiedName = `${defaultCategory.name}_${branchSuffix}`;
-            
-            // Try again with the modified name
-            newCategory.name = modifiedName;
-            try {
-              await newCategory.save();
-              importResults.push({
-                name: defaultCategory.name,
-                status: "imported",
-                id: newCategory._id,
-                originalId: defaultCategory._id,
-                modifiedName: modifiedName,
-                note: "Imported with modified name to avoid conflict"
-              });
-            } catch (retryError) {
-              importResults.push({
-                name: defaultCategory.name,
-                status: "error",
-                reason: `Failed to import even with modified name: ${retryError.message}`,
-                id: defaultCategory._id
-              });
-            }
-          } else {
-            // Handle other save errors
-            importResults.push({
-              name: defaultCategory.name,
-              status: "error",
-              reason: saveError.message || "Unknown error during save",
-              id: defaultCategory._id
-            });
-          }
-        }
+        await newCategory.save();
+        importResults.push({
+          name: defaultCategory.name,
+          status: "imported",
+          id: newCategory._id,
+          originalId: defaultCategory._id
+        });
       } catch (error) {
-        // Handle errors for individual category imports
         importResults.push({
           name: defaultCategory.name,
           status: "error",
@@ -243,7 +212,7 @@ export const importDefaultCategories = async (req, reply) => {
         ? "Selected default categories import completed" 
         : "Default categories import completed",
       totalImported: importResults.filter((r) => r.status === "imported").length,
-      totalSkipped: importResults.filter((r) => r.status === "skipped").length,
+      totalUpdated: importResults.filter((r) => r.status === "updated").length,
       totalErrors: importResults.filter((r) => r.status === "error").length,
       results: importResults,
     });

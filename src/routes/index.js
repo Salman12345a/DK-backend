@@ -15,11 +15,19 @@ import { branchRoutes } from "./branch.js";
 import customerRoutes from "./customer.js";
 import { walletRoutes } from "./wallet.js"; // New import
 import defaultTemplateRoutes from "./default-template.routes.js";
+import { initializeCategoryIndexes } from "../models/category.js";
+import { initializeProductIndexes } from "../models/products.js";
 
 const prefix = "/api";
 
 export const registerRoutes = async (fastifyInstance) => {
   try {
+    // Initialize indexes
+    await initializeCategoryIndexes();
+    console.log('Category indexes initialized successfully');
+    await initializeProductIndexes();
+    console.log('Product indexes initialized successfully');
+
     // Create uploads directory if it doesn't exist
     const fs = await import("fs");
     const path = await import("path");
@@ -66,3 +74,4 @@ export const registerRoutes = async (fastifyInstance) => {
     throw new Error("Failed to register routes");
   }
 };
+ 

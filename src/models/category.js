@@ -7,7 +7,6 @@ const categorySchema = new mongoose.Schema(
       type: String,
       required: true,
       trim: true, // Remove leading/trailing whitespace
-      unique: false, // Explicitly set to false to prevent unique constraint on just the name
     },
     image: {
       type: String,
@@ -17,7 +16,7 @@ const categorySchema = new mongoose.Schema(
     branchId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Branch",
-      required: true, // Make branchId required to ensure proper indexing
+      required: true,
     },
     imageUrl: {
       type: String, // S3 URL for the category image
@@ -42,19 +41,45 @@ const categorySchema = new mongoose.Schema(
       ref: "DefaultCategory",
       required: false,
     },
+    lastUpdatedFromDefault: {
+      type: Date,
+      required: false,
+    },
   },
   { timestamps: true }
 );
 
-// Drop any existing indexes to ensure clean state
-categorySchema.index({ name: 1 }, { unique: false }); // Explicitly override any existing unique index on name
+// Initialize function to ensure proper index setup
+export const initializeCategoryIndexes = async () => {
+  try {
+    // Drop all existing indexes except _id
+    await Category.collection.dropIndexes();
+    console.log('Dropped existing category indexes');
 
-// Ensure the combination of name and branchId is unique
-// This allows same category names across different branches
-categorySchema.index({ name: 1, branchId: 1 }, { unique: true });
+    // Create the compound index
+    await Category.collection.createIndex(
+      { name: 1, branchId: 1 },
+      { 
+        unique: true,
+        background: true,
+        name: 'unique_name_per_branch'
+      }
+    );
+    console.log('Created new compound index for categories');
+  } catch (error) {
+    console.error('Error initializing category indexes:', error);
+    throw error;
+  }
+};
 
-// Create the Category model using the schema
+// Create compound index for name and branchId to ensure uniqueness per branch
+categorySchema.index({ name: 1, branchId: 1 }, { 
+  unique: true,
+  background: true,
+  name: 'unique_name_per_branch'
+});
+
+// Create the Category model
 const Category = mongoose.model("Category", categorySchema);
 
-// Export the Category model to use in other files
 export default Category;

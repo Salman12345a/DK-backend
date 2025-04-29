@@ -5,7 +5,7 @@ const productSchema = new mongoose.Schema(
     name: { 
       type: String, 
       required: true,
-      unique: false, // Explicitly set to false to prevent unique constraint on just the name
+      trim: true,
     },
     image: { type: String, required: false },
     imageUrl: { type: String, required: false }, // S3 URL for the product image
@@ -21,7 +21,7 @@ const productSchema = new mongoose.Schema(
     branchId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Branch",
-      required: true, // Make branchId required to ensure proper indexing
+      required: true,
     },
     isAvailable: {
       type: Boolean,
@@ -57,21 +57,44 @@ const productSchema = new mongoose.Schema(
     lastModifiedBy: {
       type: String,
     },
+    lastUpdatedFromDefault: {
+      type: Date,
+      required: false,
+    },
   },
   { timestamps: true }
 );
 
-// Drop any existing indexes to ensure clean state
-productSchema.index({ name: 1 }, { unique: false }); // Explicitly override any existing unique index on name
+// Initialize function to ensure proper index setup
+export const initializeProductIndexes = async () => {
+  try {
+    // Drop all existing indexes except _id
+    await Product.collection.dropIndexes();
+    console.log('Dropped existing product indexes');
 
-// Create compound index for branch and name - allows same product names across different branches
-productSchema.index({ name: 1, branchId: 1 }, { unique: true });
+    // Create the compound index
+    await Product.collection.createIndex(
+      { name: 1, branchId: 1 },
+      { 
+        unique: true,
+        background: true,
+        name: 'unique_name_per_branch'
+      }
+    );
+    console.log('Created new compound index for products');
+  } catch (error) {
+    console.error('Error initializing product indexes:', error);
+    throw error;
+  }
+};
 
-// Index for quick filtering by availability
-productSchema.index({ branchId: 1, isAvailable: 1 });
-
-// Index for category filtering
-productSchema.index({ Category: 1, branchId: 1 });
+// Create compound index for branch and name
+productSchema.index({ name: 1, branchId: 1 }, { 
+  unique: true,
+  background: true,
+  name: 'unique_name_per_branch'
+});
 
 const Product = mongoose.model("Product", productSchema);
+
 export default Product;
