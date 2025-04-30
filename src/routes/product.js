@@ -232,7 +232,7 @@ export const branchProductRoutes = async (fastify, options) => {
     }
   );
 
-  // Update a branch product
+  // Update a branch product(important for implementation)
   fastify.put("/branch/products/:id", async (request, reply) => {
     try {
       if (request.isMultipart()) {
@@ -247,16 +247,16 @@ export const branchProductRoutes = async (fastify, options) => {
     }
   });
 
-  // Delete a branch product
+  // Delete a branch product(important for implementation)
   fastify.delete("/branch/products/:id", deleteBranchProduct);
 
-  // Get pre-signed URL for product image upload
+  // Get pre-signed URL for product image upload(important for implementation)
   fastify.get(
     "/branch/:branchId/products/:productId/image-upload-url",
     getProductImageUploadUrl
   );
 
-  // Update product image URL after successful upload
+  // Update product image URL after successful upload(important for implementation)
   fastify.post(
     "/branch/products/:productId/image-url",
     updateProductImageUrl
