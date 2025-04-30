@@ -216,18 +216,26 @@ export const importDefaultProducts = async (req, reply) => {
       return reply.status(400).send({ message: "Invalid category ID" });
     }
 
-    // Verify category exists and belongs to this branch if categoryId is provided
-    let category;
-    if (categoryId) {
-      category = await Category.findOne({ _id: categoryId, branchId });
-      if (!category) {
-        return reply.status(404).send({ 
-          message: "Category not found or does not belong to this branch" 
-        });
-      }
+    // Find the branch category and get its defaultCategoryId
+    const branchCategory = await Category.findOne({ 
+      _id: categoryId, 
+      branchId,
+      createdFromTemplate: true 
+    });
+
+    if (!branchCategory) {
+      return reply.status(404).send({ 
+        message: "Category not found or is not an imported default category" 
+      });
     }
 
-    // Get default products based on provided IDs or filter by category
+    if (!branchCategory.defaultCategoryId) {
+      return reply.status(400).send({ 
+        message: "Category is not properly linked to a default category" 
+      });
+    }
+
+    // Get default products based on provided IDs or filter by original default category
     let defaultProducts;
     let selectionMode = "all";
     
@@ -241,37 +249,29 @@ export const importDefaultProducts = async (req, reply) => {
         });
       }
       
-      // Get only the selected active default products
+      // Get only the selected active default products that belong to the original default category
       defaultProducts = await DefaultProduct.find({ 
         _id: { $in: validIds },
+        defaultCategory: branchCategory.defaultCategoryId,
         isActive: true 
       });
       selectionMode = "selected";
       
       if (defaultProducts.length === 0) {
         return reply.status(404).send({ 
-          message: "No active default products found with the provided IDs." 
+          message: "No active default products found with the provided IDs for this category." 
         });
       }
-    } else if (categoryId) {
-      // Get all active default products for the specified category
+    } else {
+      // Get all active default products for the original default category
       defaultProducts = await DefaultProduct.find({ 
-        Category: categoryId,
+        defaultCategory: branchCategory.defaultCategoryId,
         isActive: true 
       });
       
       if (defaultProducts.length === 0) {
         return reply.status(404).send({ 
-          message: "No active default products found for the specified category." 
-        });
-      }
-    } else {
-      // Get all active default products
-      defaultProducts = await DefaultProduct.find({ isActive: true });
-      
-      if (defaultProducts.length === 0) {
-        return reply.status(404).send({ 
-          message: "No active default products found in the system." 
+          message: "No active default products found for this category." 
         });
       }
     }
@@ -289,12 +289,12 @@ export const importDefaultProducts = async (req, reply) => {
 
         if (existingProduct) {
           // Update the existing product with the latest default product data
-          existingProduct.price = defaultProduct.price;
+          existingProduct.price = defaultProduct.suggestedPrice;
           existingProduct.discountPrice = defaultProduct.discountPrice;
-          existingProduct.quantity = defaultProduct.quantity;
+          existingProduct.quantity = defaultProduct.quantity || "1";
           existingProduct.unit = defaultProduct.unit;
-          existingProduct.Category = defaultProduct.Category;
-          existingProduct.image = defaultProduct.imageUrl; // For backwards compatibility
+          existingProduct.Category = categoryId; // Use branch category ID
+          existingProduct.image = defaultProduct.imageUrl;
           existingProduct.imageUrl = defaultProduct.imageUrl;
           existingProduct.isPacket = defaultProduct.isPacket || false;
           existingProduct.description = defaultProduct.description || "";
@@ -302,7 +302,7 @@ export const importDefaultProducts = async (req, reply) => {
           existingProduct.defaultProductId = defaultProduct._id;
           existingProduct.isAvailable = true;
           existingProduct.lastUpdatedFromDefault = new Date();
-          existingProduct.modifiedFromDefault = false; // Reset modification flag
+          existingProduct.modifiedFromDefault = false;
 
           await existingProduct.save();
           
@@ -319,12 +319,12 @@ export const importDefaultProducts = async (req, reply) => {
         const newProduct = new Product({
           name: defaultProduct.name,
           branchId,
-          price: defaultProduct.price,
+          price: defaultProduct.suggestedPrice,
           discountPrice: defaultProduct.discountPrice,
-          quantity: defaultProduct.quantity,
+          quantity: defaultProduct.quantity || "1",
           unit: defaultProduct.unit,
-          Category: defaultProduct.Category,
-          image: defaultProduct.imageUrl, // For backwards compatibility
+          Category: categoryId, // Use branch category ID
+          image: defaultProduct.imageUrl,
           imageUrl: defaultProduct.imageUrl,
           isPacket: defaultProduct.isPacket || false,
           description: defaultProduct.description || "",
