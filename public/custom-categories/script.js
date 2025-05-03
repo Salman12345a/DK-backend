@@ -8,7 +8,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const imagePreview = document.getElementById('imagePreview');
     const messageBox = document.getElementById('messageBox');
 
-    // For displaying the final image URL
+    // For displaying the final image and category name
     let imageUrlDisplay = document.getElementById('imageUrlDisplay');
     if (!imageUrlDisplay) {
         imageUrlDisplay = document.createElement('div');
@@ -18,8 +18,9 @@ document.addEventListener('DOMContentLoaded', () => {
         messageBox.parentNode.appendChild(imageUrlDisplay);
     }
 
-    // Store branchId, categoryId, and presigned URL info for the session
-    let branchId = '';
+    // Get branchId from URL query parameter
+    const urlParams = new URLSearchParams(window.location.search);
+    let branchId = urlParams.get('branchId');
     let categoryId = '';
     let imageContentType = '';
     let presignedUploadUrl = '';
@@ -27,12 +28,12 @@ document.addEventListener('DOMContentLoaded', () => {
     let presignedContentType = '';
     let originalImageFile = null;
     let previewDataUrl = '';
+    let lastCategoryName = '';
 
-    // Prompt for branchId (or set it here for demo)
-    branchId = prompt('Enter your Branch ID:');
     if (!branchId) {
-        showMessage('Branch ID is required!', 'error');
+        showMessage('Branch ID is required in the URL (?branchId=...)', 'error');
         categoryNameForm.style.display = 'none';
+        categoryImageForm.style.display = 'none';
         return;
     }
 
@@ -44,6 +45,7 @@ document.addEventListener('DOMContentLoaded', () => {
             showMessage('Please enter a category name.', 'error');
             return;
         }
+        lastCategoryName = categoryName;
         try {
             // Create the category
             const response = await fetch(`/api/branch/${branchId}/categories`, {
@@ -197,11 +199,21 @@ document.addEventListener('DOMContentLoaded', () => {
                 throw new Error('Failed to update category image URL');
             }
             const updateData = await updateUrlRes.json();
-            showMessage('Image uploaded and category updated successfully!', 'success');
-            categoryImageForm.reset();
+            // Hide forms and preview
+            categoryImageForm.style.display = 'none';
             imagePreview.innerHTML = '';
+            messageBox.style.display = 'none';
+            // Show uploaded image with checkmark and category name
             if (updateData.imageUrl) {
-                imageUrlDisplay.innerHTML = `<strong>Image URL:</strong> <a href="${updateData.imageUrl}" target="_blank">${updateData.imageUrl}</a>`;
+                imageUrlDisplay.innerHTML = `
+                  <div class="uploaded-category-result">
+                    <div class="uploaded-image-wrapper">
+                      <img src="${updateData.imageUrl}" alt="Uploaded Category Image" class="uploaded-image" />
+                      <span class="checkmark-icon">&#10004;</span>
+                    </div>
+                    <div class="uploaded-category-name">${lastCategoryName}</div>
+                  </div>
+                `;
             } else {
                 imageUrlDisplay.innerHTML = '';
             }
