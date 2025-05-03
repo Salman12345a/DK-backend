@@ -25,6 +25,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let presignedUploadUrl = '';
     let presignedKey = '';
     let presignedContentType = '';
+    let originalImageFile = null;
+    let previewDataUrl = '';
 
     // Prompt for branchId (or set it here for demo)
     branchId = prompt('Enter your Branch ID:');
@@ -85,13 +87,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 categoryImage.value = '';
                 return;
             }
-            imageContentType = file.type;
-            // Only fetch a new pre-signed URL if the type is different from the last one used
+            originalImageFile = file;
+            // Always use image/jpeg for upload
+            imageContentType = 'image/jpeg';
+            // Only fetch a new pre-signed URL if not already jpeg
             if (imageContentType !== presignedContentType && categoryId) {
                 try {
                     const urlRes = await fetch(`/api/branch/${branchId}/categories/${categoryId}/image-upload-url?contentType=${encodeURIComponent(imageContentType)}`);
                     if (!urlRes.ok) {
-                        throw new Error('Failed to get pre-signed URL for selected image type');
+                        throw new Error('Failed to get pre-signed URL for JPEG');
                     }
                     const { uploadUrl, key } = await urlRes.json();
                     presignedUploadUrl = uploadUrl;
@@ -102,19 +106,68 @@ document.addEventListener('DOMContentLoaded', () => {
                     return;
                 }
             }
+            // Preview the image
             const reader = new FileReader();
             reader.onload = (e) => {
-                imagePreview.innerHTML = `<img src="${e.target.result}" alt="Preview">`;
+                previewDataUrl = e.target.result;
+                imagePreview.innerHTML = `<img src="${previewDataUrl}" alt="Preview">`;
             };
             reader.readAsDataURL(file);
         }
     });
 
+    // Compress and convert image to JPEG with white background
+    async function compressAndConvertToJpeg(file, quality = 0.7, maxDim = 1024) {
+        return new Promise((resolve, reject) => {
+            const img = new window.Image();
+            img.onload = function () {
+                let width = img.width;
+                let height = img.height;
+                // Resize if needed
+                if (width > maxDim || height > maxDim) {
+                    if (width > height) {
+                        height = Math.round((height * maxDim) / width);
+                        width = maxDim;
+                    } else {
+                        width = Math.round((width * maxDim) / height);
+                        height = maxDim;
+                    }
+                }
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                // Fill with white
+                ctx.fillStyle = 'white';
+                ctx.fillRect(0, 0, width, height);
+                // Draw the image
+                ctx.drawImage(img, 0, 0, width, height);
+                // Export as JPEG
+                canvas.toBlob(
+                    (blob) => {
+                        if (blob) resolve(blob);
+                        else reject(new Error('Compression failed'));
+                    },
+                    'image/jpeg',
+                    quality
+                );
+            };
+            img.onerror = function () {
+                reject(new Error('Image load error'));
+            };
+            // Use FileReader to get data URL
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        });
+    }
+
     // Step 2: Handle image upload
     categoryImageForm.addEventListener('submit', async (e) => {
         e.preventDefault();
-        const file = categoryImage.files[0];
-        if (!file) {
+        if (!originalImageFile) {
             showMessage('Please select an image.', 'error');
             return;
         }
@@ -123,11 +176,13 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         try {
+            // Compress and convert to JPEG with white background
+            const compressedBlob = await compressAndConvertToJpeg(originalImageFile, 0.7, 1024);
             // Upload image to S3 using the stored presigned URL
             const uploadRes = await fetch(presignedUploadUrl, {
                 method: 'PUT',
-                body: file,
-                headers: { 'Content-Type': file.type }
+                body: compressedBlob,
+                headers: { 'Content-Type': 'image/jpeg' }
             });
             if (!uploadRes.ok) {
                 throw new Error('Failed to upload image');
@@ -150,6 +205,8 @@ document.addEventListener('DOMContentLoaded', () => {
             } else {
                 imageUrlDisplay.innerHTML = '';
             }
+            originalImageFile = null;
+            previewDataUrl = '';
         } catch (error) {
             showMessage(error.message, 'error');
         }
