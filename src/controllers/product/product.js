@@ -715,3 +715,69 @@ export const deactivateImportedProducts = async (req, reply) => {
     });
   }
 };
+
+// Delete one or multiple custom products with detailed error reasons
+export const deleteCustomProduct = async (req, reply) => {
+  try {
+    const { branchId } = req.params;
+    let { productIds } = req.body || {};
+
+    // Support single delete via params for backward compatibility
+    if (!productIds && req.params.id) {
+      productIds = [req.params.id];
+    }
+
+    // Validate branch ID
+    if (!mongoose.Types.ObjectId.isValid(branchId)) {
+      return reply.status(400).send({ message: "Invalid branch ID" });
+    }
+
+    // Validate product IDs
+    if (!productIds || !Array.isArray(productIds) || productIds.length === 0) {
+      return reply.status(400).send({ message: "Please provide an array of product IDs to delete" });
+    }
+
+    const validIds = productIds.filter(id => mongoose.Types.ObjectId.isValid(id));
+    if (validIds.length === 0) {
+      return reply.status(400).send({ message: "No valid product IDs provided" });
+    }
+
+    // Verify branch exists
+    const branch = await Branch.findById(branchId);
+    if (!branch) {
+      return reply.status(404).send({ message: "Branch not found" });
+    }
+
+    const deleted = [];
+    const notDeleted = [];
+
+    for (const id of validIds) {
+      const product = await Product.findById(id);
+      if (!product) {
+        notDeleted.push({ id, reason: "Product not found" });
+        continue;
+      }
+      if (product.branchId.toString() !== branchId) {
+        notDeleted.push({ id, reason: "Product does not belong to the specified branch" });
+        continue;
+      }
+      if (product.createdFromTemplate || product.defaultProductId) {
+        notDeleted.push({ id, reason: "Product is not a custom product" });
+        continue;
+      }
+      await Product.findByIdAndDelete(id);
+      deleted.push({ id: product._id, name: product.name, status: "deleted" });
+    }
+
+    return reply.send({
+      message: deleted.length === 1 ? "Custom product deleted successfully" : "Custom products deleted successfully",
+      deleted,
+      notDeleted
+    });
+  } catch (error) {
+    return reply.status(500).send({
+      message: "Error deleting custom product(s)",
+      error: error.message
+    });
+  }
+};

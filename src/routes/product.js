@@ -22,6 +22,7 @@ import {
   disableProductsFromOrder,
   modifyImportedDefaultProduct,
   deactivateImportedProducts,
+  deleteCustomProduct,
 } from "../controllers/product/product.js";
 
 import {
@@ -289,6 +290,9 @@ export const branchProductRoutes = async (fastify, options) => {
 
   // Remove imported default products (single or bulk)
   fastify.put("/branch/:branchId/products/remove-imported", deactivateImportedProducts);
+
+  // Delete a custom product (single or multiple)
+  fastify.delete("/branch/:branchId/products/custom", deleteCustomProduct);
 };
 
 // Admin default category routes
