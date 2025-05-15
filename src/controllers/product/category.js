@@ -503,58 +503,68 @@ export const removeImportedCategories = async (req, reply) => {
   }
 };
 
-// Delete a custom category
+// Delete one or multiple custom categories with detailed error reasons
 export const deleteCustomCategory = async (req, reply) => {
   try {
-    const { id, branchId } = req.params;
-    
-    // Validate IDs
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return reply.status(400).send({ message: "Invalid category ID" });
+    const { branchId } = req.params;
+    let { categoryIds } = req.body || {};
+
+    // Support single delete via params for backward compatibility
+    if (!categoryIds && req.params.id) {
+      categoryIds = [req.params.id];
     }
-    
+
+    // Validate branch ID
     if (!mongoose.Types.ObjectId.isValid(branchId)) {
       return reply.status(400).send({ message: "Invalid branch ID" });
     }
-    
+
+    // Validate category IDs
+    if (!categoryIds || !Array.isArray(categoryIds) || categoryIds.length === 0) {
+      return reply.status(400).send({ message: "Please provide an array of category IDs to delete" });
+    }
+
+    const validIds = categoryIds.filter(id => mongoose.Types.ObjectId.isValid(id));
+    if (validIds.length === 0) {
+      return reply.status(400).send({ message: "No valid category IDs provided" });
+    }
+
     // Verify branch exists
     const branch = await Branch.findById(branchId);
     if (!branch) {
       return reply.status(404).send({ message: "Branch not found" });
     }
-    
-    // Find the category
-    const category = await Category.findById(id);
-    if (!category) {
-      return reply.status(404).send({ message: "Category not found" });
+
+    const deleted = [];
+    const notDeleted = [];
+
+    for (const id of validIds) {
+      const category = await Category.findById(id);
+      if (!category) {
+        notDeleted.push({ id, reason: "Category not found" });
+        continue;
+      }
+      if (category.branchId.toString() !== branchId) {
+        notDeleted.push({ id, reason: "Category does not belong to the specified branch" });
+        continue;
+      }
+      if (category.createdFromTemplate || category.createdBy === "system" || category.defaultCategoryId) {
+        notDeleted.push({ id, reason: "Category is not a custom category" });
+        continue;
+      }
+      await Category.findByIdAndDelete(id);
+      deleted.push({ id: category._id, name: category.name, status: "deleted" });
     }
-    
-    // Verify it belongs to the specified branch
-    if (category.branchId.toString() !== branchId) {
-      return reply.status(403).send({ 
-        message: "This category does not belong to the specified branch" 
-      });
-    }
-    
-    // Verify it's a custom category
-    if (category.createdFromTemplate || category.createdBy === "system") {
-      return reply.status(400).send({ 
-        message: "This operation is only allowed for custom categories" 
-      });
-    }
-    
-    // Delete the category
-    await Category.findByIdAndDelete(id);
-    
-    return reply.send({ 
-      message: "Custom category deleted successfully",
-      categoryId: id,
-      categoryName: category.name
+
+    return reply.send({
+      message: deleted.length === 1 ? "Custom category deleted successfully" : "Custom categories deleted successfully",
+      deleted,
+      notDeleted
     });
   } catch (error) {
-    return reply.status(500).send({ 
-      message: "Error deleting custom category", 
-      error: error.message 
+    return reply.status(500).send({
+      message: "Error deleting custom category(s)",
+      error: error.message
     });
   }
 };

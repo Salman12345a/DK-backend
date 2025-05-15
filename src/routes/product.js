@@ -144,7 +144,7 @@ export const branchCategoryRoutes = async (fastify, options) => {
   fastify.delete("/branch/categories/:id", deleteBranchCategory);
 
   // Delete a custom category
-  fastify.delete("/branch/:branchId/categories/:id/custom", deleteCustomCategory);
+  fastify.delete("/branch/:branchId/categories/custom", deleteCustomCategory);
 
   // Remove imported default categories (single or bulk)
   fastify.put("/branch/:branchId/categories/remove-imported", removeImportedCategories);
