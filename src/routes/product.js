@@ -8,6 +8,7 @@ import {
   deactivateImportedCategory,
   deactivateMultipleImportedCategories,
   removeImportedCategories,
+  deleteCustomCategory,
 } from "../controllers/product/category.js";
 
 import {
@@ -140,6 +141,9 @@ export const branchCategoryRoutes = async (fastify, options) => {
 
   // Delete a branch category
   fastify.delete("/branch/categories/:id", deleteBranchCategory);
+
+  // Delete a custom category
+  fastify.delete("/branch/:branchId/categories/:id/custom", deleteCustomCategory);
 
   // Remove imported default categories (single or bulk)
   fastify.put("/branch/:branchId/categories/remove-imported", removeImportedCategories);
