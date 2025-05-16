@@ -8,6 +8,59 @@ import {
 } from "../../models/index.js";
 import { uploadToS3, generateProductKey } from "../../utils/s3Upload.js";
 
+// Get a specific product by branchId, categoryId, and productId
+export const getBranchCategoryProduct = async (req, reply) => {
+  try {
+    const { branchId, categoryId, productId } = req.params;
+
+    // Validate all IDs
+    if (
+      !mongoose.Types.ObjectId.isValid(branchId) ||
+      !mongoose.Types.ObjectId.isValid(categoryId) ||
+      !mongoose.Types.ObjectId.isValid(productId)
+    ) {
+      return reply.status(400).send({ message: "Invalid ID format" });
+    }
+
+    // Verify branch exists
+    const branch = await Branch.findById(branchId);
+    if (!branch) {
+      return reply.status(404).send({ message: "Branch not found" });
+    }
+
+    // Verify category exists for this branch
+    const category = await Category.findOne({ _id: categoryId, branchId });
+    if (!category) {
+      return reply
+        .status(404)
+        .send({ message: "Category not found for this branch" });
+    }
+
+    // Get the product that matches branch, category and product ID
+    const product = await Product.findOne({
+      _id: productId,
+      branchId,
+      Category: categoryId,
+      isAvailable: true,
+    }).populate("Category", "name imageUrl");
+
+    if (!product) {
+      return reply.status(404).send({ 
+        message: "Product not found or is unavailable in this category and branch" 
+      });
+    }
+
+    return reply.send(product);
+  } catch (error) {
+    return reply
+      .status(500)
+      .send({
+        message: "Error fetching product",
+        error: error.message,
+      });
+  }
+};
+
 // Get products by category ID (original function for backward compatibility)
 export const getProductByCategoryId = async (req, reply) => {
   const { categoryId } = req.params;

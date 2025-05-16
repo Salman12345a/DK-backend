@@ -15,6 +15,7 @@ import {
   getProductByCategoryId,
   getBranchProducts,
   getBranchProductsByCategory,
+  getBranchCategoryProduct,
   createBranchProduct,
   importDefaultProducts,
   updateBranchProduct,
@@ -184,6 +185,9 @@ export const branchCategoryRoutes = async (fastify, options) => {
 export const branchProductRoutes = async (fastify, options) => {
   // Get all products for a branch
   fastify.get("/branch/:branchId/products", getBranchProducts);
+  
+  // Get a specific product by branch, category, and product ID
+  fastify.get("/branch/:branchId/categories/:categoryId/products/:productId", getBranchCategoryProduct);
 
   // Get products for a branch by category
   fastify.get(
