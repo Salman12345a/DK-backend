@@ -7,6 +7,12 @@ import {
   getWalletStatistics,
   setupWalletListener,
 } from "../controllers/wallet/wallet.js";
+import {
+  createRazorpayOrder,
+  verifyPayment,
+  handleWebhook,
+  getPaymentStatus,
+} from "../controllers/wallet/razorpay.js";
 
 export const walletRoutes = async (fastify) => {
   fastify.addHook("onRequest", (request, reply, done) => {
@@ -61,4 +67,51 @@ export const walletRoutes = async (fastify) => {
 
   // Initialize WebSocket listener
   setupWalletListener(fastify.io);
+  
+  // Razorpay integration endpoints
+  
+  // Create a new Razorpay order
+  fastify.post(
+    "/wallet/razorpay/order/:branchId",
+    { preHandler: [verifyToken, checkBranchRole] },
+    async (request, reply) => {
+      console.log("Handling POST /wallet/razorpay/order/:branchId");
+      return createRazorpayOrder(request, reply);
+    }
+  );
+  
+  // Verify payment and update wallet
+  fastify.post(
+    "/wallet/razorpay/verify/:branchId",
+    { preHandler: [verifyToken, checkBranchRole] },
+    async (request, reply) => {
+      console.log("Handling POST /wallet/razorpay/verify/:branchId");
+      return verifyPayment(request, reply);
+    }
+  );
+  
+  // Get payment status
+  fastify.get(
+    "/wallet/razorpay/payment/:paymentId",
+    { preHandler: [verifyToken] },
+    async (request, reply) => {
+      console.log("Handling GET /wallet/razorpay/payment/:paymentId");
+      return getPaymentStatus(request, reply);
+    }
+  );
+  
+  // Webhook endpoint - does not require auth as it's called by Razorpay
+  fastify.post(
+    "/wallet/razorpay/webhook",
+    { 
+      schema: {
+        // Disable body parsing to verify raw body for webhook
+        body: { type: 'object', additionalProperties: true }
+      }
+    },
+    async (request, reply) => {
+      console.log("Handling POST /wallet/razorpay/webhook");
+      return handleWebhook(request, reply);
+    }
+  );
 };

@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>StoreSync Wallet Payment</title>
+    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #5C69FF;
+            --secondary-color: #6979F8;
+            --success-color: #00C48C;
+            --danger-color: #FF647C;
+            --warning-color: #FFA26B;
+            --background-color: #F7F9FC;
+            --text-color: #3E4462;
+            --light-text: #A0A3BD;
+            --card-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Poppins', sans-serif;
+            background-color: var(--background-color);
+            color: var(--text-color);
+            min-height: 100vh;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .container {
+            width: 100%;
+            max-width: 500px;
+            background: white;
+            border-radius: 16px;
+            box-shadow: var(--card-shadow);
+            padding: 24px;
+            margin-bottom: 20px;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 24px;
+        }
+        
+        .logo {
+            font-size: 24px;
+            font-weight: 600;
+            color: var(--primary-color);
+            margin-bottom: 8px;
+        }
+        
+        .title {
+            font-size: 20px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+        
+        .subtitle {
+            font-size: 14px;
+            color: var(--light-text);
+            margin-bottom: 24px;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            font-size: 14px;
+            font-weight: 500;
+            margin-bottom: 8px;
+        }
+        
+        input {
+            width: 100%;
+            padding: 12px 16px;
+            border: 1px solid #E2E8F0;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+        
+        input:focus {
+            outline: none;
+            border-color: var(--primary-color);
+        }
+        
+        .button {
+            width: 100%;
+            padding: 14px;
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        
+        .button:hover {
+            background-color: var(--secondary-color);
+        }
+        
+        .button:disabled {
+            background-color: var(--light-text);
+            cursor: not-allowed;
+        }
+        
+        .balance-container {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background-color: rgba(92, 105, 255, 0.1);
+            padding: 16px;
+            border-radius: 8px;
+            margin-bottom: 24px;
+        }
+        
+        .balance-label {
+            font-size: 14px;
+            color: var(--primary-color);
+        }
+        
+        .balance-amount {
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--primary-color);
+        }
+        
+        .payment-methods {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 24px;
+        }
+        
+        .payment-method {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 70px;
+            cursor: pointer;
+        }
+        
+        .payment-icon {
+            width: 40px;
+            height: 40px;
+            background-color: rgba(92, 105, 255, 0.1);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 8px;
+        }
+        
+        .payment-name {
+            font-size: 12px;
+            text-align: center;
+        }
+        
+        .result {
+            padding: 16px;
+            border-radius: 8px;
+            text-align: center;
+            display: none;
+            margin-top: 16px;
+        }
+        
+        .success {
+            background-color: rgba(0, 196, 140, 0.1);
+            color: var(--success-color);
+        }
+        
+        .error {
+            background-color: rgba(255, 100, 124, 0.1);
+            color: var(--danger-color);
+        }
+        
+        .loading {
+            display: none;
+            text-align: center;
+            margin-top: 16px;
+        }
+        
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid rgba(92, 105, 255, 0.1);
+            border-radius: 50%;
+            border-top-color: var(--primary-color);
+            animation: spin 1s ease-in-out infinite;
+            margin: 0 auto 8px auto;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .back-button {
+            margin-top: 16px;
+            color: var(--primary-color);
+            text-decoration: none;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .back-button:before {
+            content: '←';
+            margin-right: 8px;
+        }
+        
+        /* Receipt styling */
+        .receipt {
+            display: none;
+            width: 100%;
+            padding: 24px;
+            background-color: white;
+            border-radius: 16px;
+            box-shadow: var(--card-shadow);
+        }
+        
+        .receipt-header {
+            text-align: center;
+            margin-bottom: 24px;
+        }
+        
+        .receipt-title {
+            font-size: 20px;
+            font-weight: 600;
+            color: var(--success-color);
+            margin-bottom: 8px;
+        }
+        
+        .receipt-subtitle {
+            font-size: 14px;
+            color: var(--light-text);
+        }
+        
+        .receipt-details {
+            margin-bottom: 24px;
+        }
+        
+        .receipt-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 12px 0;
+            border-bottom: 1px solid #F0F0F7;
+        }
+        
+        .receipt-label {
+            font-size: 14px;
+            color: var(--light-text);
+        }
+        
+        .receipt-value {
+            font-size: 14px;
+            font-weight: 500;
+        }
+        
+        .receipt-total {
+            font-size: 16px;
+            font-weight: 600;
+        }
+        
+        .receipt-footer {
+            text-align: center;
+            margin-top: 24px;
+            padding-top: 24px;
+            border-top: 1px dashed #F0F0F7;
+        }
+        
+        .receipt-message {
+            font-size: 14px;
+            color: var(--light-text);
+            margin-bottom: 8px;
+        }
+        
+        .receipt-support {
+            font-size: 12px;
+            color: var(--primary-color);
+        }
+    </style>
+</head>
+<body>
+    <div class="container" id="payment-form">
+        <div class="header">
+            <div class="logo">StoreSync</div>
+            <h1 class="title">Wallet Recharge</h1>
+            <p class="subtitle">Add money to your wallet to continue using platform services</p>
+        </div>
+        
+        <div class="balance-container">
+            <span class="balance-label">Current Balance</span>
+            <span class="balance-amount" id="current-balance">₹0.00</span>
+        </div>
+        
+        <div class="form-group">
+            <label for="amount">Amount (₹)</label>
+            <input type="number" id="amount" placeholder="Enter amount" min="1" step="1">
+        </div>
+        
+        <div class="payment-methods">
+            <div class="payment-method" data-method="upi">
+                <div class="payment-icon">UPI</div>
+                <span class="payment-name">UPI</span>
+            </div>
+            <div class="payment-method" data-method="card">
+                <div class="payment-icon">Card</div>
+                <span class="payment-name">Card</span>
+            </div>
+            <div class="payment-method" data-method="netbanking">
+                <div class="payment-icon">NB</div>
+                <span class="payment-name">NetBanking</span>
+            </div>
+            <div class="payment-method" data-method="wallet">
+                <div class="payment-icon">W</div>
+                <span class="payment-name">Wallet</span>
+            </div>
+        </div>
+        
+        <button id="pay-button" class="button" disabled>Pay Now</button>
+        
+        <div id="result" class="result"></div>
+        
+        <div id="loading" class="loading">
+            <div class="spinner"></div>
+            <p>Processing your payment...</p>
+        </div>
+    </div>
+    
+    <div class="receipt" id="receipt">
+        <div class="receipt-header">
+            <div class="receipt-title">Payment Successful</div>
+            <div class="receipt-subtitle">Transaction completed successfully</div>
+        </div>
+        
+        <div class="receipt-details">
+            <div class="receipt-row">
+                <span class="receipt-label">Transaction ID</span>
+                <span class="receipt-value" id="receipt-txn-id">TXN123456789</span>
+            </div>
+            <div class="receipt-row">
+                <span class="receipt-label">Date & Time</span>
+                <span class="receipt-value" id="receipt-date">May 17, 2025 09:30 PM</span>
+            </div>
+            <div class="receipt-row">
+                <span class="receipt-label">Payment Method</span>
+                <span class="receipt-value" id="receipt-method">UPI</span>
+            </div>
+            <div class="receipt-row">
+                <span class="receipt-label">Amount Paid</span>
+                <span class="receipt-value receipt-total" id="receipt-amount">₹500.00</span>
+            </div>
+            <div class="receipt-row">
+                <span class="receipt-label">New Balance</span>
+                <span class="receipt-value receipt-total" id="receipt-balance">₹1,500.00</span>
+            </div>
+        </div>
+        
+        <div class="receipt-footer">
+            <p class="receipt-message">Thank you for using StoreSync!</p>
+            <p class="receipt-support">If you have any questions, please contact support</p>
+        </div>
+        
+        <button id="done-button" class="button">Done</button>
+    </div>
+    
+    <a href="javascript:void(0)" id="back-button" class="back-button">Return to App</a>
+    
+    <script>
+        // Get URL parameters
+        const urlParams = new URLSearchParams(window.location.search);
+        const branchId = urlParams.get('branchId');
+        const token = urlParams.get('token');
+        const branchName = urlParams.get('branchName') || 'Your Store';
+        const currentBalance = parseFloat(urlParams.get('balance') || '0');
+        
+        // Update current balance display
+        document.getElementById('current-balance').textContent = '₹' + currentBalance.toFixed(2);
+        
+        // Required validation and UI helpers
+        const amountInput = document.getElementById('amount');
+        const payButton = document.getElementById('pay-button');
+        const resultDiv = document.getElementById('result');
+        const loadingDiv = document.getElementById('loading');
+        const receiptDiv = document.getElementById('receipt');
+        const paymentForm = document.getElementById('payment-form');
+        const doneButton = document.getElementById('done-button');
+        const backButton = document.getElementById('back-button');
+        
+        // Enable/disable pay button based on input
+        amountInput.addEventListener('input', function() {
+            const amount = parseFloat(this.value);
+            payButton.disabled = isNaN(amount) || amount < 1;
+        });
+        
+        // Payment method selection
+        const paymentMethods = document.querySelectorAll('.payment-method');
+        let selectedMethod = null;
+        
+        paymentMethods.forEach(method => {
+            method.addEventListener('click', function() {
+                // Remove selected class from all methods
+                paymentMethods.forEach(m => m.style.opacity = '0.5');
+                
+                // Add selected class to clicked method
+                this.style.opacity = '1';
+                selectedMethod = this.dataset.method;
+            });
+        });
+        
+        // Initialize with UPI selected
+        document.querySelector('[data-method="upi"]').click();
+        
+        // Handle payment
+        payButton.addEventListener('click', async function() {
+            const amount = parseFloat(amountInput.value);
+            
+            if (isNaN(amount) || amount < 1) {
+                showResult('Please enter a valid amount', 'error');
+                return;
+            }
+            
+            // Show loading
+            loadingDiv.style.display = 'block';
+            resultDiv.style.display = 'none';
+            
+            try {
+                // Create Razorpay order
+                const orderResponse = await fetch(`/api/wallet/razorpay/order/${branchId}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({ amount })
+                });
+                
+                const orderData = await orderResponse.json();
+                
+                if (!orderData.success) {
+                    throw new Error(orderData.error || 'Failed to create order');
+                }
+                
+                // Configure Razorpay options
+                const options = {
+                    key: orderData.order.key,
+                    amount: orderData.order.amount,
+                    currency: orderData.order.currency,
+                    name: 'StoreSync',
+                    description: 'Wallet Recharge',
+                    order_id: orderData.order.id,
+                    prefill: {
+                        name: orderData.branch.name,
+                        email: orderData.branch.email,
+                        contact: orderData.branch.phone
+                    },
+                    theme: {
+                        color: '#5C69FF'
+                    },
+                    modal: {
+                        ondismiss: function() {
+                            loadingDiv.style.display = 'none';
+                            showResult('Payment cancelled', 'error');
+                        }
+                    },
+                    handler: function(response) {
+                        // Send payment verification to server
+                        verifyPayment(response, amount);
+                    }
+                };
+                
+                const rzp = new Razorpay(options);
+                rzp.open();
+                
+            } catch (error) {
+                loadingDiv.style.display = 'none';
+                showResult(error.message, 'error');
+            }
+        });
+        
+        // Verify payment with server
+        async function verifyPayment(response, amount) {
+            try {
+                const verifyResponse = await fetch(`/api/wallet/razorpay/verify/${branchId}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({
+                        razorpay_payment_id: response.razorpay_payment_id,
+                        razorpay_order_id: response.razorpay_order_id,
+                        razorpay_signature: response.razorpay_signature,
+                        branchId,
+                        amount: amount * 100 // Convert to paisa
+                    })
+                });
+                
+                const verifyData = await verifyResponse.json();
+                
+                if (!verifyData.success) {
+                    throw new Error(verifyData.error || 'Payment verification failed');
+                }
+                
+                // Update receipt details
+                document.getElementById('receipt-txn-id').textContent = verifyData.transaction.razorpayPaymentId;
+                document.getElementById('receipt-date').textContent = new Date().toLocaleString();
+                document.getElementById('receipt-method').textContent = selectedMethod.toUpperCase();
+                document.getElementById('receipt-amount').textContent = '₹' + amount.toFixed(2);
+                document.getElementById('receipt-balance').textContent = '₹' + verifyData.newBalance.toFixed(2);
+                
+                // Show receipt
+                paymentForm.style.display = 'none';
+                receiptDiv.style.display = 'block';
+                loadingDiv.style.display = 'none';
+                
+                // Signal to app that payment is complete
+                if (window.ReactNativeWebView) {
+                    window.ReactNativeWebView.postMessage(JSON.stringify({
+                        type: 'PAYMENT_SUCCESS',
+                        data: {
+                            transactionId: verifyData.transaction.razorpayPaymentId,
+                            amount: amount,
+                            newBalance: verifyData.newBalance
+                        }
+                    }));
+                }
+                
+            } catch (error) {
+                loadingDiv.style.display = 'none';
+                showResult(error.message, 'error');
+            }
+        }
+        
+        // Show result message
+        function showResult(message, type) {
+            resultDiv.textContent = message;
+            resultDiv.className = `result ${type}`;
+            resultDiv.style.display = 'block';
+        }
+        
+        // Handle done button click
+        doneButton.addEventListener('click', function() {
+            returnToApp();
+        });
+        
+        // Handle back button click
+        backButton.addEventListener('click', function() {
+            returnToApp();
+        });
+        
+        // Return to app function
+        function returnToApp() {
+            if (window.ReactNativeWebView) {
+                window.ReactNativeWebView.postMessage(JSON.stringify({
+                    type: 'CLOSE_WEBVIEW'
+                }));
+            } else {
+                // For browser testing
+                window.close();
+            }
+        }
+    </script>
+</body>
+</html>
