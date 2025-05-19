@@ -22,6 +22,9 @@ const orderSchema = new mongoose.Schema(
           required: true,
         },
         count: { type: Number, required: true },
+        quantity: { type: Number }, // For loose products
+        unit: { type: String }, // Unit of measurement (kg, liter, pack, etc.)
+        isPacket: { type: Boolean }, // To store if item is packed or loose
         price: { type: Number, required: true },
       },
     ],

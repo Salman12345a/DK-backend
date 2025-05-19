@@ -27,25 +27,81 @@ const validateModifications = (originalItems, modifiedItems) => {
         message: `Cannot increase quantity for ${origItem.item.name}`,
       };
     }
+    
+    // Check if product is loose or packed
+    // First check if the item already has isPacket stored
+    const isLooseProduct = origItem.isPacket === false || origItem.item.isPacket === false;
+    
     if (modItem.count === 0) {
       changes.push(`Removed ${origItem.item.name} (${origItem.count}x)`);
     } else if (modItem.count < origItem.count) {
       changes.push(
         `Reduced ${origItem.item.name} from ${origItem.count} to ${modItem.count}`
       );
-      updatedItems.push({
-        item: origItem.item._id,
-        count: modItem.count,
-        price: origItem.price,
-      });
-      newTotal += origItem.price * modItem.count;
+      
+      // For loose products, handle quantity
+      if (isLooseProduct) {
+        const quantity = Number(modItem.quantity || modItem.customQuantity || modItem.count);
+        if (isNaN(quantity) || quantity <= 0) {
+          return { 
+            valid: false, 
+            message: `Valid quantity is required for loose product: ${origItem.item.name}` 
+          };
+        }
+        
+        updatedItems.push({
+          item: origItem.item._id,
+          count: modItem.count,
+          quantity: quantity,
+          unit: origItem.unit || origItem.item.unit,
+          isPacket: false,
+          price: origItem.price,
+        });
+        newTotal += origItem.price * quantity;
+      } else {
+        // For packed products
+        updatedItems.push({
+          item: origItem.item._id,
+          count: modItem.count,
+          quantity: origItem.quantity || origItem.item.quantity,
+          unit: origItem.unit || origItem.item.unit,
+          isPacket: true,
+          price: origItem.price,
+        });
+        newTotal += origItem.price * modItem.count;
+      }
     } else {
-      updatedItems.push({
-        item: origItem.item._id,
-        count: modItem.count,
-        price: origItem.price,
-      });
-      newTotal += origItem.price * modItem.count;
+      // For loose products, handle quantity
+      if (isLooseProduct) {
+        const quantity = Number(modItem.quantity || modItem.customQuantity || origItem.quantity || origItem.customQuantity || modItem.count);
+        if (isNaN(quantity) || quantity <= 0) {
+          return { 
+            valid: false, 
+            message: `Valid quantity is required for loose product: ${origItem.item.name}` 
+          };
+        }
+        
+        updatedItems.push({
+          item: origItem.item._id,
+          count: modItem.count,
+          quantity: quantity,
+          unit: origItem.unit || origItem.item.unit,
+          isPacket: false,
+          price: origItem.price,
+        });
+        newTotal += origItem.price * quantity;
+      } else {
+        // For packed products
+        updatedItems.push({
+          item: origItem.item._id,
+          count: modItem.count,
+          quantity: origItem.quantity || origItem.item.quantity,
+          unit: origItem.unit || origItem.item.unit,
+          isPacket: true,
+          price: origItem.price,
+        });
+        newTotal += origItem.price * modItem.count;
+      }
     }
     itemMap.delete(modItem.item.toString());
   }
@@ -255,15 +311,57 @@ export const createOrder = async (req, reply) => {
 
     const productIds = items.map((i) => i.id);
     const products = await Product.find({ _id: { $in: productIds } });
+    
+    // Process items based on whether they are packed or loose products
     const itemsWithPrices = items.map((item) => {
       const product = products.find((p) => p._id.toString() === item.id);
       if (!product) throw new Error(`Product ${item.id} not found`);
-      return { item: item.id, count: Number(item.count), price: product.price };
+      
+      // For loose products (isPacket = false), validate and use quantity
+      if (!product.isPacket) {
+        const quantity = Number(item.quantity || item.customQuantity || item.count);
+        
+        // Validate quantity for loose products
+        if (isNaN(quantity) || quantity <= 0) {
+          throw new Error(`Valid quantity is required for loose product: ${product.name}`);
+        }
+        
+        return { 
+          item: item.id, 
+          count: Number(item.count), 
+          quantity: quantity,
+          unit: product.unit, // Store the unit of measurement
+          isPacket: false, // Store that this is a loose product
+          price: product.price 
+        };
+      } 
+      // For packed products (isPacket = true), use the standard count
+      else {
+        return { 
+          item: item.id, 
+          count: Number(item.count), 
+          quantity: product.quantity, // Store the product's quantity information
+          unit: product.unit, // Store the unit of measurement
+          isPacket: true, // Store that this is a packed product
+          price: product.price 
+        };
+      }
     });
-    const totalPrice = itemsWithPrices.reduce(
-      (sum, item) => sum + item.price * item.count,
-      0
-    );
+    
+    // Calculate total price based on product type
+    const totalPrice = itemsWithPrices.reduce((sum, item) => {
+      const product = products.find((p) => p._id.toString() === item.item);
+      
+      // For loose products, use quantity for price calculation
+      if (!product.isPacket) {
+        return sum + (item.price * item.quantity);
+      }
+      // For packed products, use count for price calculation
+      else {
+        return sum + (item.price * item.count);
+      }
+    }, 0);
+    
 
     const availablePartners = await DeliveryPartner.find({
       branch,
@@ -568,9 +666,35 @@ export const getOrderById = async (req, reply) => {
       { path: "items.item" },
     ]);
 
-    return order
-      ? reply.send(order)
-      : reply.status(404).send({ message: "Order not found" });
+    if (order) {
+      // Create a JSON representation that we can modify
+      const orderObj = order.toObject();
+      
+      // Calculate finalPrice for each item
+      if (orderObj.items && Array.isArray(orderObj.items)) {
+        orderObj.items = orderObj.items.map(item => {
+          // Check if the item is a packet or loose product
+          const isPacket = item.isPacket !== undefined ? item.isPacket : 
+                          (item.item && item.item.isPacket !== undefined ? item.item.isPacket : true);
+          
+          // Calculate finalPrice based on product type
+          if (!isPacket) {
+            // For loose products, use quantity
+            const quantity = Number(item.quantity || 0);
+            item.finalPrice = item.price * quantity;
+          } else {
+            // For packed products, use count
+            item.finalPrice = item.price * item.count;
+          }
+          
+          return item;
+        });
+      }
+      
+      return reply.send(orderObj);
+    } else {
+      return reply.status(404).send({ message: "Order not found" });
+    }
   } catch (err) {
     console.error("Fetch Order Error:", err);
     return reply
