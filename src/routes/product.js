@@ -24,6 +24,8 @@ import {
   modifyImportedDefaultProduct,
   deactivateImportedProducts,
   deleteCustomProduct,
+  getDisabledBranchProducts,
+  enableProduct,
 } from "../controllers/product/product.js";
 
 import {
@@ -54,6 +56,8 @@ import {
 import { writeFile } from "fs/promises";
 import { join } from "path";
 import { randomUUID } from "crypto";
+import { uploadToS3 } from "../utils/s3Upload.js";
+import { verifyToken, checkBranchRole } from "../middleware/auth.js";
 
 // Multer configuration - keep as fallback if needed
 import multer from "fastify-multer";
@@ -183,8 +187,152 @@ export const branchCategoryRoutes = async (fastify, options) => {
 
 // Branch-specific product routes
 export const branchProductRoutes = async (fastify, options) => {
+  // Global authentication hook for all branch product routes
+  fastify.addHook("preHandler", async (request, reply) => {
+    const isAuthenticated = await verifyToken(request, reply);
+    if (!isAuthenticated) {
+      return reply.code(401).send({ 
+        status: "ERROR", 
+        message: "Authentication required", 
+        code: "AUTHENTICATION_REQUIRED" 
+      });
+    }
+  });
   // Get all products for a branch
   fastify.get("/branch/:branchId/products", getBranchProducts);
+  
+  // Get all disabled products for a branch
+  fastify.get("/branch/:branchId/products/disabled", {
+    schema: {
+      params: {
+        type: "object",
+        properties: {
+          branchId: { type: "string" }
+        },
+        required: ["branchId"]
+      },
+      response: {
+        200: {
+          type: "object",
+          properties: {
+            status: { type: "string" },
+            data: {
+              type: "object",
+              properties: {
+                count: { type: "number" },
+                products: { type: "array" }
+              }
+            }
+          }
+        },
+        400: {
+          type: "object",
+          properties: {
+            status: { type: "string" },
+            message: { type: "string" },
+            code: { type: "string" }
+          }
+        },
+        404: {
+          type: "object",
+          properties: {
+            status: { type: "string" },
+            message: { type: "string" },
+            code: { type: "string" }
+          }
+        },
+        500: {
+          type: "object",
+          properties: {
+            status: { type: "string" },
+            message: { type: "string" },
+            code: { type: "string" },
+            systemError: { type: "string" }
+          }
+        }
+      }
+    },
+    handler: getDisabledBranchProducts
+  });
+  
+  // Enable a disabled product
+  fastify.patch("/branch/products/:productId/enable", {
+    schema: {
+      params: {
+        type: "object",
+        properties: {
+          productId: { type: "string" }
+        },
+        required: ["productId"]
+      },
+      headers: {
+        type: "object",
+        properties: {
+          Authorization: { type: "string" }
+        },
+        required: ["Authorization"]
+      },
+      response: {
+        200: {
+          type: "object",
+          properties: {
+            status: { type: "string" },
+            message: { type: "string" },
+            data: {
+              type: "object",
+              properties: {
+                product: { type: "object" },
+                enabled: { type: "boolean" },
+                enabledAt: { type: "string", format: "date-time" }
+              }
+            }
+          }
+        },
+        400: {
+          type: "object",
+          properties: {
+            status: { type: "string" },
+            message: { type: "string" },
+            code: { type: "string" }
+          }
+        },
+        401: {
+          type: "object",
+          properties: {
+            status: { type: "string" },
+            message: { type: "string" },
+            code: { type: "string" }
+          }
+        },
+        403: {
+          type: "object",
+          properties: {
+            status: { type: "string" },
+            message: { type: "string" },
+            code: { type: "string" }
+          }
+        },
+        404: {
+          type: "object",
+          properties: {
+            status: { type: "string" },
+            message: { type: "string" },
+            code: { type: "string" }
+          }
+        },
+        500: {
+          type: "object",
+          properties: {
+            status: { type: "string" },
+            message: { type: "string" },
+            code: { type: "string" },
+            systemError: { type: "string" }
+          }
+        }
+      }
+    },
+    handler: enableProduct
+  });
   
   // Get a specific product by branch, category, and product ID
   fastify.get("/branch/:branchId/categories/:categoryId/products/:productId", getBranchCategoryProduct);
@@ -192,7 +340,66 @@ export const branchProductRoutes = async (fastify, options) => {
   // Get products for a branch by category
   fastify.get(
     "/branch/:branchId/categories/:categoryId/products",
-    getBranchProductsByCategory
+    {
+      schema: {
+        params: {
+          type: "object",
+          properties: {
+            branchId: { type: "string" },
+            categoryId: { type: "string" }
+          },
+          required: ["branchId", "categoryId"]
+        },
+        querystring: {
+          type: "object",
+          properties: {
+            showAll: { type: "string", enum: ["true", "false"] }
+          }
+        },
+        response: {
+          200: {
+            type: "object",
+            properties: {
+              status: { type: "string" },
+              data: {
+                type: "object",
+                properties: {
+                  categoryName: { type: "string" },
+                  totalProducts: { type: "number" },
+                  products: { type: "array" }
+                }
+              }
+            }
+          },
+          400: {
+            type: "object",
+            properties: {
+              status: { type: "string" },
+              message: { type: "string" },
+              code: { type: "string" }
+            }
+          },
+          404: {
+            type: "object",
+            properties: {
+              status: { type: "string" },
+              message: { type: "string" },
+              code: { type: "string" }
+            }
+          },
+          500: {
+            type: "object",
+            properties: {
+              status: { type: "string" },
+              message: { type: "string" },
+              code: { type: "string" },
+              systemError: { type: "string" }
+            }
+          }
+        }
+      },
+      handler: getBranchProductsByCategory
+    }
   );
 
   // Create a new product for a branch

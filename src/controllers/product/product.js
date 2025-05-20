@@ -8,6 +8,116 @@ import {
 } from "../../models/index.js";
 import { uploadToS3, generateProductKey } from "../../utils/s3Upload.js";
 
+// Enable a disabled product (make it available again)
+export const enableProduct = async (req, reply) => {
+  try {
+    const { productId } = req.params;
+    const branchId = req.user.userId; // Branch ID from authenticated user
+    
+    // Validate product ID
+    if (!mongoose.Types.ObjectId.isValid(productId)) {
+      return reply.status(400).send({
+        status: "ERROR",
+        message: "Invalid product ID format",
+        code: "INVALID_ID_FORMAT"
+      });
+    }
+    
+    // Find the product and verify it belongs to this branch
+    const product = await Product.findOne({ 
+      _id: productId,
+      branchId,
+      isAvailable: false // Only enable products that are currently disabled
+    });
+    
+    if (!product) {
+      return reply.status(404).send({
+        status: "ERROR",
+        message: "Product not found or is already available",
+        code: "PRODUCT_NOT_FOUND"
+      });
+    }
+    
+    // Update the product to make it available
+    product.isAvailable = true;
+    product.lastModifiedBy = req.user.role || "branch_admin";
+    product.disabledReason = null; // Clear the disabled reason
+    product.lastEnabledAt = new Date();
+    
+    await product.save();
+    
+    return reply.send({
+      status: "SUCCESS",
+      message: "Product successfully enabled",
+      data: {
+        product: product.toObject(),
+        enabled: true,
+        enabledAt: product.lastEnabledAt
+      }
+    });
+  } catch (error) {
+    console.error("[EnableProduct] Error:", error);
+    return reply.status(500).send({
+      status: "ERROR",
+      message: "Failed to enable product",
+      code: "ENABLE_FAILED",
+      systemError: error.message
+    });
+  }
+};
+
+// Get all disabled products for a branch
+export const getDisabledBranchProducts = async (req, reply) => {
+  try {
+    const { branchId } = req.params;
+
+    // Validate branch ID
+    if (!mongoose.Types.ObjectId.isValid(branchId)) {
+      return reply.status(400).send({ 
+        status: "ERROR",
+        message: "Invalid branch ID format",
+        code: "INVALID_ID_FORMAT"
+      });
+    }
+
+    // Verify branch exists
+    const branch = await Branch.findById(branchId);
+    if (!branch) {
+      return reply.status(404).send({ 
+        status: "ERROR",
+        message: "Branch not found",
+        code: "BRANCH_NOT_FOUND"
+      });
+    }
+
+    // Get all disabled products for this branch
+    const disabledProducts = await Product.find({
+      branchId,
+      isAvailable: false
+    }).populate("Category", "name imageUrl");
+
+    return reply.send({
+      status: "SUCCESS",
+      data: {
+        count: disabledProducts.length,
+        products: disabledProducts.map(product => ({
+          ...product.toObject(),
+          disabledReason: product.disabledReason || "Unknown reason",
+          disabledSince: product.lastDisabledAt || product.updatedAt
+        }))
+      }
+    });
+  } catch (error) {
+    console.error("[GetDisabledBranchProducts] Error:", error);
+    return reply.status(500).send({
+      status: "ERROR",
+      message: "Error fetching disabled branch products",
+      code: "FETCH_ERROR",
+      systemError: error.message
+    });
+  }
+};
+
 // Get a specific product by branchId, categoryId, and productId
 export const getBranchCategoryProduct = async (req, reply) => {
   try {
@@ -130,44 +240,87 @@ export const getBranchProducts = async (req, reply) => {
 export const getBranchProductsByCategory = async (req, reply) => {
   try {
     const { branchId, categoryId } = req.params;
+    const showOnlyAvailable = req.query.showOnlyAvailable === 'true'; // Parameter now defaults to showing all products
 
     // Validate IDs
     if (
       !mongoose.Types.ObjectId.isValid(branchId) ||
       !mongoose.Types.ObjectId.isValid(categoryId)
     ) {
-      return reply.status(400).send({ message: "Invalid ID format" });
+      return reply.status(400).send({ 
+        status: "ERROR",
+        message: "Invalid ID format",
+        code: "INVALID_ID_FORMAT"
+      });
     }
 
     // Verify branch exists
     const branch = await Branch.findById(branchId);
     if (!branch) {
-      return reply.status(404).send({ message: "Branch not found" });
+      return reply.status(404).send({ 
+        status: "ERROR",
+        message: "Branch not found",
+        code: "BRANCH_NOT_FOUND"
+      });
     }
 
     // Verify category exists for this branch
     const category = await Category.findOne({ _id: categoryId, branchId });
     if (!category) {
-      return reply
-        .status(404)
-        .send({ message: "Category not found for this branch" });
+      return reply.status(404).send({ 
+        status: "ERROR",
+        message: "Category not found for this branch",
+        code: "CATEGORY_NOT_FOUND"
+      });
     }
 
-    // Get products for this branch and category
-    const products = await Product.find({
+    // Query object - for branch and category
+    const query = {
       branchId,
-      Category: categoryId,
-      isAvailable: true,
-    }).populate("Category", "name imageUrl");
+      Category: categoryId
+    };
+    
+    // Only filter by availability if explicitly requested
+    if (showOnlyAvailable) {
+      query.isAvailable = true;
+    }
 
-    return reply.send(products);
+    // Get products for this branch and category (both available and unavailable by default)
+    const products = await Product.find(query).populate("Category", "name imageUrl");
+    
+    // Add extra information to unavailable products
+    const enhancedProducts = products.map(product => {
+      // For unavailable products, add reason and timestamp if needed
+      if (!product.isAvailable) {
+        const productObj = product.toObject();
+        // Only add these fields if they don't already exist
+        if (!productObj.disabledReason) {
+          productObj.disabledReason = product.disabledReason || "Temporarily out of stock";
+        }
+        if (!productObj.lastDisabledAt) {
+          productObj.lastDisabledAt = product.lastDisabledAt || product.updatedAt;
+        }
+        return productObj;
+      }
+      return product;
+    });
+
+    return reply.send({
+      status: "SUCCESS",
+      data: {
+        categoryName: category.name,
+        totalProducts: products.length,
+        products: enhancedProducts
+      }
+    });
   } catch (error) {
-    return reply
-      .status(500)
-      .send({
-        message: "Error fetching branch products by category",
-        error: error.message,
-      });
+    console.error("[GetBranchProductsByCategory] Error:", error);
+    return reply.status(500).send({
+      status: "ERROR",
+      message: "Error fetching branch products by category",
+      code: "FETCH_ERROR",
+      systemError: error.message
+    });
   }
 };
 

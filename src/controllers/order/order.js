@@ -3,6 +3,7 @@ import Branch from "../../models/branch.js";
 import { Customer, DeliveryPartner } from "../../models/user.js";
 import Product from "../../models/products.js";
 import { updateWalletWithOrderCharge } from "../../utils/walletUtils.js";
+import mongoose from "mongoose";
 
 const defaultLocation = {
   latitude: 0,
@@ -119,13 +120,49 @@ const validateModifications = (originalItems, modifiedItems) => {
   };
 };
 
+// Helper function to update product availability
+const updateProductAvailability = async (productIds, branchId) => {
+  if (!productIds || productIds.length === 0) return;
+  
+  try {
+    const currentTime = new Date();
+    const updateResult = await Product.updateMany(
+      { 
+        _id: { $in: productIds },
+        branchId: branchId 
+      },
+      { 
+        $set: { 
+          isAvailable: false,
+          disabledReason: "Removed from order due to inventory shortage",
+          lastDisabledAt: currentTime,
+          lastModifiedBy: "branch_admin"
+        } 
+      }
+    );
+    
+    console.log(`[UpdateProductAvailability] Disabled ${updateResult.modifiedCount} products`);
+    return updateResult.modifiedCount;
+  } catch (error) {
+    console.error("[UpdateProductAvailability] Error:", error);
+    // Don't throw the error - we don't want to fail the order modification
+    // if product updates fail
+    return 0;
+  }
+};
+
 export const modifyOrder = async (req, reply) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  
   try {
     const { orderId } = req.params;
     const { modifiedItems } = req.body;
     const branchId = req.user.userId;
 
     if (!modifiedItems || !Array.isArray(modifiedItems)) {
+      await session.abortTransaction();
+      session.endSession();
       return reply.code(400).send({
         status: "ERROR",
         message: "Invalid modification data",
@@ -137,9 +174,11 @@ export const modifyOrder = async (req, reply) => {
       _id: orderId,
       branch: branchId,
       status: "accepted",
-    }).populate("items.item", "name price");
+    }).populate("items.item", "name price isPacket");
 
     if (!order) {
+      await session.abortTransaction();
+      session.endSession();
       return reply.code(404).send({
         status: "ERROR",
         message: "Order not found or not modifiable",
@@ -149,6 +188,8 @@ export const modifyOrder = async (req, reply) => {
 
     const validation = validateModifications(order.items, modifiedItems);
     if (!validation.valid) {
+      await session.abortTransaction();
+      session.endSession();
       return reply.code(400).send({
         status: "ERROR",
         message: validation.message,
@@ -156,6 +197,12 @@ export const modifyOrder = async (req, reply) => {
       });
     }
 
+    // Identify products with count set to 0 (removed products)
+    const removedProductIds = modifiedItems
+      .filter(item => item.count === 0)
+      .map(item => item.item);
+      
+    // Update order details
     order.items = validation.updatedItems;
     order.totalPrice = validation.newTotal;
     order.modifiedAt = new Date();
@@ -165,7 +212,15 @@ export const modifyOrder = async (req, reply) => {
       timestamp: new Date(),
     });
 
-    await order.save();
+    await order.save({ session });
+    
+    // Update product availability for removed products
+    if (removedProductIds.length > 0) {
+      await updateProductAvailability(removedProductIds, branchId);
+    }
+    
+    await session.commitTransaction();
+    session.endSession();
 
     req.server.io.to(orderId).emit("orderStatusUpdate", order.toObject());
     req.server.io.emit("orderModified", {
@@ -195,6 +250,8 @@ export const modifyOrder = async (req, reply) => {
     });
   } catch (error) {
     console.error("[ModifyOrder] Error:", error);
+    await session.abortTransaction();
+    session.endSession();
     return reply.code(500).send({
       status: "ERROR",
       message: "Order modification failed",
