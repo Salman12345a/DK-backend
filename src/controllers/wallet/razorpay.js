@@ -21,10 +21,10 @@ export const createRazorpayOrder = async (request, reply) => {
     const { amount } = request.body;
     
     // Validate amount (frontend sends amount in rupees)
-    if (!amount || amount < 1) { // Minimum amount is 1 INR
+    if (!amount || amount < 30) { // Minimum amount is 30 INR
       return reply.status(400).send({ 
         success: false, 
-        error: "Amount must be at least 1 INR" 
+        error: "Amount must be at least 30 INR" 
       });
     }
     

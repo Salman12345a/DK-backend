@@ -318,7 +318,7 @@
         <button id="pay-button" class="button" disabled>Pay Now</button>
         
         <div id="result" class="result"></div>
-        <div id="error-message" class="result error" style="display: none;">Amount must be at least 1 INR</div>
+        <div id="error-message" class="result error" style="display: none;">Amount must be at least 30 INR</div>
         
         <div id="loading" class="loading">
             <div class="spinner"></div>
@@ -386,7 +386,7 @@
         const doneButton = document.getElementById('done-button');
         const backButton = document.getElementById('back-button');
         
-        // Enable/disable pay button based on input
+        // Enable pay button as long as there's a valid number
         const errorMessage = document.getElementById('error-message');
         
         amountInput.addEventListener('input', function() {
@@ -394,7 +394,8 @@
             const isValid = !isNaN(amount) && amount >= 1;
             
             payButton.disabled = !isValid;
-            errorMessage.style.display = isValid ? 'none' : 'block';
+            // Hide error message on input - will only show on button click if amount < 30
+            errorMessage.style.display = 'none';
         });
         
         // Payment method selection removed as Razorpay handles this
@@ -406,6 +407,12 @@
             
             if (isNaN(amount) || amount < 1) {
                 showResult('Please enter a valid amount', 'error');
+                return;
+            }
+            
+            // Check for minimum 30 rupees limit
+            if (amount < 30) {
+                errorMessage.style.display = 'block';
                 return;
             }
             
