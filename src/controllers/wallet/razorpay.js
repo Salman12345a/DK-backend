@@ -20,11 +20,11 @@ export const createRazorpayOrder = async (request, reply) => {
     const { branchId } = request.params;
     const { amount } = request.body;
     
-    // Validate amount
-    if (!amount || amount < 100) { // Minimum amount is 100 paisa (1 INR)
+    // Validate amount (frontend sends amount in rupees)
+    if (!amount || amount < 1) { // Minimum amount is 1 INR
       return reply.status(400).send({ 
         success: false, 
-        error: "Amount must be at least 1 INR (100 paisa)" 
+        error: "Amount must be at least 1 INR" 
       });
     }
     
@@ -37,11 +37,26 @@ export const createRazorpayOrder = async (request, reply) => {
       });
     }
     
-    // Create order in Razorpay
+    // Create order in Razorpay with a receipt that respects the 40-char limit
+    // Generate a shorter receipt ID that won't exceed Razorpay's 40 character limit
+    const shortBranchId = branchId.toString().substring(0, 8);
+    const timestamp = Math.floor(Date.now() / 1000); // Unix timestamp (seconds) is shorter
+    let receipt = `w-${shortBranchId}-${timestamp}`;
+    
+    // Validate receipt length to ensure it's under Razorpay's limit
+    if (receipt.length > 40) {
+      request.log.warn({
+        msg: "Receipt too long, using fallback format",
+        receiptLength: receipt.length
+      });
+      // Fallback to an even shorter format if still too long
+      receipt = `w-${shortBranchId}-${Date.now() % 1000000}`;
+    }
+    
     const orderOptions = {
       amount: amount * 100, // Amount in paisa (Razorpay uses smallest currency unit)
       currency: 'INR',
-      receipt: `wallet-${branchId}-${Date.now()}`,
+      receipt: receipt,
       notes: {
         branchId: branchId,
         branchName: branch.name,

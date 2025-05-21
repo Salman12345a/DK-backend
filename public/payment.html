@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>StoreSync Wallet Payment</title>
+    <title>DoKirana Wallet Payment</title>
     <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
@@ -48,7 +48,6 @@
         }
         
         .header {
-            text-align: center;
             margin-bottom: 24px;
         }
         
@@ -63,12 +62,14 @@
             font-size: 20px;
             font-weight: 600;
             margin-bottom: 8px;
+            text-align: center;
         }
         
         .subtitle {
             font-size: 14px;
             color: var(--light-text);
             margin-bottom: 24px;
+            text-align: center;
         }
         
         .form-group {
@@ -297,7 +298,7 @@
 <body>
     <div class="container" id="payment-form">
         <div class="header">
-            <div class="logo">StoreSync</div>
+            <div class="logo">DoKirana</div>
             <h1 class="title">Wallet Recharge</h1>
             <p class="subtitle">Add money to your wallet to continue using platform services</p>
         </div>
@@ -312,28 +313,12 @@
             <input type="number" id="amount" placeholder="Enter amount" min="1" step="1">
         </div>
         
-        <div class="payment-methods">
-            <div class="payment-method" data-method="upi">
-                <div class="payment-icon">UPI</div>
-                <span class="payment-name">UPI</span>
-            </div>
-            <div class="payment-method" data-method="card">
-                <div class="payment-icon">Card</div>
-                <span class="payment-name">Card</span>
-            </div>
-            <div class="payment-method" data-method="netbanking">
-                <div class="payment-icon">NB</div>
-                <span class="payment-name">NetBanking</span>
-            </div>
-            <div class="payment-method" data-method="wallet">
-                <div class="payment-icon">W</div>
-                <span class="payment-name">Wallet</span>
-            </div>
-        </div>
+        <!-- Payment method selection removed as Razorpay handles this -->
         
         <button id="pay-button" class="button" disabled>Pay Now</button>
         
         <div id="result" class="result"></div>
+        <div id="error-message" class="result error" style="display: none;">Amount must be at least 1 INR</div>
         
         <div id="loading" class="loading">
             <div class="spinner"></div>
@@ -371,7 +356,7 @@
         </div>
         
         <div class="receipt-footer">
-            <p class="receipt-message">Thank you for using StoreSync!</p>
+            <p class="receipt-message">Thank you for using DoKirana!</p>
             <p class="receipt-support">If you have any questions, please contact support</p>
         </div>
         
@@ -402,28 +387,18 @@
         const backButton = document.getElementById('back-button');
         
         // Enable/disable pay button based on input
+        const errorMessage = document.getElementById('error-message');
+        
         amountInput.addEventListener('input', function() {
             const amount = parseFloat(this.value);
-            payButton.disabled = isNaN(amount) || amount < 1;
+            const isValid = !isNaN(amount) && amount >= 1;
+            
+            payButton.disabled = !isValid;
+            errorMessage.style.display = isValid ? 'none' : 'block';
         });
         
-        // Payment method selection
-        const paymentMethods = document.querySelectorAll('.payment-method');
-        let selectedMethod = null;
-        
-        paymentMethods.forEach(method => {
-            method.addEventListener('click', function() {
-                // Remove selected class from all methods
-                paymentMethods.forEach(m => m.style.opacity = '0.5');
-                
-                // Add selected class to clicked method
-                this.style.opacity = '1';
-                selectedMethod = this.dataset.method;
-            });
-        });
-        
-        // Initialize with UPI selected
-        document.querySelector('[data-method="upi"]').click();
+        // Payment method selection removed as Razorpay handles this
+        let selectedMethod = 'razorpay';
         
         // Handle payment
         payButton.addEventListener('click', async function() {
@@ -440,7 +415,7 @@
             
             try {
                 // Create Razorpay order
-                const orderResponse = await fetch(`/api/wallet/razorpay/order/${branchId}`, {
+                const orderResponse = await fetch(`/api/wallet/razorpay/order/create/${branchId}`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -460,7 +435,7 @@
                     key: orderData.order.key,
                     amount: orderData.order.amount,
                     currency: orderData.order.currency,
-                    name: 'StoreSync',
+                    name: 'DoKirana',
                     description: 'Wallet Recharge',
                     order_id: orderData.order.id,
                     prefill: {
@@ -506,7 +481,7 @@
                         razorpay_order_id: response.razorpay_order_id,
                         razorpay_signature: response.razorpay_signature,
                         branchId,
-                        amount: amount * 100 // Convert to paisa
+                        amount: parseInt(amount * 100) // Convert to paisa and ensure it's an integer
                     })
                 });
                 
@@ -519,9 +494,9 @@
                 // Update receipt details
                 document.getElementById('receipt-txn-id').textContent = verifyData.transaction.razorpayPaymentId;
                 document.getElementById('receipt-date').textContent = new Date().toLocaleString();
-                document.getElementById('receipt-method').textContent = selectedMethod.toUpperCase();
-                document.getElementById('receipt-amount').textContent = '₹' + amount.toFixed(2);
-                document.getElementById('receipt-balance').textContent = '₹' + verifyData.newBalance.toFixed(2);
+                document.getElementById('receipt-method').textContent = 'Razorpay';
+                document.getElementById('receipt-amount').textContent = '₹' + parseFloat(amount).toFixed(2);
+                document.getElementById('receipt-balance').textContent = '₹' + parseFloat(verifyData.newBalance).toFixed(2);
                 
                 // Show receipt
                 paymentForm.style.display = 'none';
