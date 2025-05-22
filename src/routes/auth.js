@@ -8,6 +8,7 @@ import {
   completeBranchLogin,
   initiateLogin,
   verifyLogin,
+  loginAdmin,
 } from "../controllers/auth/auth.js";
 import { updateUser } from "../controllers/tracking/user.js";
 import { verifyToken } from "../middleware/auth.js";
@@ -115,6 +116,21 @@ export const authRoutes = async (fastify, options) => {
   );
 
   fastify.post("/delivery/login", loginDeliveryPartner);
+  
+  // Admin login endpoint
+  fastify.post("/admin/login", {
+    schema: {
+      body: {
+        type: "object",
+        required: ["email", "password"],
+        properties: {
+          email: { type: "string", format: "email" },
+          password: { type: "string" }
+        }
+      }
+    }
+  }, loginAdmin);
+  
   fastify.post("/refresh-token", refreshToken);
   fastify.get("/user", { preHandler: [verifyToken] }, fetchUser);
   fastify.patch("/update", { preHandler: [verifyToken] }, updateUser);

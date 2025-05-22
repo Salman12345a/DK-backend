@@ -52,20 +52,9 @@ const categorySchema = new mongoose.Schema(
 // Initialize function to ensure proper index setup
 export const initializeCategoryIndexes = async () => {
   try {
-    // Drop all existing indexes except _id
-    await Category.collection.dropIndexes();
-    console.log('Dropped existing category indexes');
-
-    // Create the compound index
-    await Category.collection.createIndex(
-      { name: 1, branchId: 1 },
-      { 
-        unique: true,
-        background: true,
-        name: 'unique_name_per_branch'
-      }
-    );
-    console.log('Created new compound index for categories');
+    // We'll use the schema-level index declaration instead of manually creating it here
+    // This avoids duplicate index creation
+    console.log('Category indexes are defined at the schema level');
   } catch (error) {
     console.error('Error initializing category indexes:', error);
     throw error;

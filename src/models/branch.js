@@ -23,7 +23,7 @@ const statusHistorySchema = new mongoose.Schema({
 
 const branchSchema = new mongoose.Schema(
   {
-    phone: { type: String, required: true, unique: true },
+    phone: { type: String, required: true }, // unique index defined explicitly below
     name: { type: String, required: true },
     location: {
       type: { type: String, enum: ["Point"], default: "Point" },

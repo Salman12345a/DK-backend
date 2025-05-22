@@ -5,7 +5,7 @@ const walletSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: "Branch",
     required: true,
-    unique: true,
+    // unique index defined explicitly below
   },
   balance: { type: Number, default: 0 },
   transactions: [

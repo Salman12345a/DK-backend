@@ -68,20 +68,9 @@ const productSchema = new mongoose.Schema(
 // Initialize function to ensure proper index setup
 export const initializeProductIndexes = async () => {
   try {
-    // Drop all existing indexes except _id
-    await Product.collection.dropIndexes();
-    console.log('Dropped existing product indexes');
-
-    // Create the compound index
-    await Product.collection.createIndex(
-      { name: 1, branchId: 1 },
-      { 
-        unique: true,
-        background: true,
-        name: 'unique_name_per_branch'
-      }
-    );
-    console.log('Created new compound index for products');
+    // We'll use the schema-level index declaration instead of manually creating it here
+    // This avoids duplicate index creation
+    console.log('Product indexes are defined at the schema level');
   } catch (error) {
     console.error('Error initializing product indexes:', error);
     throw error;

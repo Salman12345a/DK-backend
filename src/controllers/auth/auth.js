@@ -1,4 +1,4 @@
-import { Customer, DeliveryPartner } from "../../models/user.js";
+import { Customer, DeliveryPartner, Admin } from "../../models/user.js";
 import Branch from "../../models/branch.js";
 import jwt from "jsonwebtoken";
 import "dotenv/config";
@@ -591,6 +591,61 @@ export const refreshToken = async (req, reply) => {
   }
 };
 
+export const loginAdmin = async (req, reply) => {
+  try {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      return reply.status(400).send({
+        status: "error",
+        message: "Email and password are required",
+      });
+    }
+
+    // Find the admin by email
+    const admin = await Admin.findOne({ email });
+    if (!admin) {
+      return reply.status(401).send({
+        status: "error",
+        message: "Invalid credentials",
+      });
+    }
+
+    // Verify password (consider using bcrypt for secure password comparison)
+    if (password !== admin.password) {
+      return reply.status(401).send({
+        status: "error",
+        message: "Invalid credentials",
+      });
+    }
+
+    // Generate authentication tokens
+    const { accessToken, refreshToken } = generateTokens(admin);
+
+    return reply.status(200).send({
+      status: "success",
+      message: "Admin login successful",
+      data: {
+        admin: {
+          _id: admin._id,
+          email: admin.email,
+          name: admin.name,
+          role: admin.role,
+        },
+        accessToken,
+        refreshToken,
+      },
+    });
+  } catch (error) {
+    console.error("Error in loginAdmin:", error);
+    return reply.status(500).send({
+      status: "error",
+      message: "An error occurred while logging in",
+      error: process.env.NODE_ENV === "development" ? error.message : undefined,
+    });
+  }
+};
+
 export const fetchUser = async (req, reply) => {
   try {
     const token = req.headers.authorization?.split(" ")[1];
@@ -613,6 +668,17 @@ export const fetchUser = async (req, reply) => {
       user = await Customer.findById(userId);
     } else if (role === "DeliveryPartner") {
       user = await DeliveryPartner.findById(userId);
+    } else if (role === "Admin") {
+      user = await Admin.findById(userId);
+      // Only return safe admin properties
+      if (user) {
+        user = {
+          _id: user._id,
+          email: user.email,
+          name: user.name,
+          role: user.role
+        };
+      }
     } else {
       return reply.status(403).send({ message: "Invalid role" });
     }
