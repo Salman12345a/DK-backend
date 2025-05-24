@@ -15,6 +15,7 @@ import { branchRoutes } from "./branch.js";
 import customerRoutes from "./customer.js";
 import { walletRoutes } from "./wallet.js"; // New import
 import defaultTemplateRoutes from "./default-template.routes.js";
+import { affiliateRoutes } from "./affiliate.js";
 import { initializeCategoryIndexes } from "../models/category.js";
 import { initializeProductIndexes } from "../models/products.js";
 
@@ -57,6 +58,9 @@ export const registerRoutes = async (fastifyInstance) => {
     fastifyInstance.register(defaultCategoryRoutes, { prefix: `${prefix}` });
     fastifyInstance.register(defaultProductRoutes, { prefix: `${prefix}` });
     fastifyInstance.register(defaultTemplateRoutes, { prefix: `${prefix}/templates` });
+
+    // Register affiliate product routes
+    fastifyInstance.register(affiliateRoutes, { prefix: `${prefix}` });
 
     // Add a root health check endpoint for AWS Beanstalk
     fastifyInstance.get("/", async (request, reply) => {
