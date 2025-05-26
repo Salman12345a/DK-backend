@@ -238,3 +238,39 @@ export const deleteAffiliateProduct = async (request, reply) => {
     });
   }
 };
+
+// Get all affiliate products (public access, no authentication required)
+export const getPublicAffiliateProducts = async (request, reply) => {
+  try {
+    const { isActive, limit = 10, skip = 0 } = request.query;
+    
+    // Build query based on optional isActive parameter
+    // For public endpoint, default to only showing active products
+    const query = { isActive: isActive === 'false' ? false : true };
+
+    // Get total count for pagination
+    const total = await AffiliateProduct.countDocuments(query);
+    
+    // Fetch affiliate products with pagination
+    const affiliateProducts = await AffiliateProduct.find(query)
+      .sort({ createdAt: -1 })
+      .limit(parseInt(limit))
+      .skip(parseInt(skip));
+
+    return reply.code(200).send({
+      status: "success",
+      data: {
+        total,
+        count: affiliateProducts.length,
+        affiliateProducts,
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching public affiliate products:", error);
+    return reply.code(500).send({
+      status: "error",
+      message: "Failed to fetch affiliate products",
+      error: error.message,
+    });
+  }
+};
