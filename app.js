@@ -97,6 +97,16 @@ const start = async () => {
       return this.redirect(url, code);
     });
 
+    // Add health check endpoints for App Engine flexible environment
+    app.get('/health', (request, reply) => {
+      reply.code(200).send({ status: 'ok' });
+    });
+
+    app.get('/ready', (request, reply) => {
+      // Only return 200 if DB is connected
+      reply.code(200).send({ status: 'ready' });
+    });
+
     console.log("Building AdminJS router...");
     await buildAdminRouter(app);
     console.log("Registering routes...");
