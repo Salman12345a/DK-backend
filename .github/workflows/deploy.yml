@@ -56,7 +56,7 @@ jobs:
           wait_for_environment_recovery: 300
       
       - name: Upload deployment artifact
-        uses: actions/upload-artifact@v3.1.0
+        uses: actions/upload-artifact@v3
         with:
           name: deployment-package
           path: deploy.zip
